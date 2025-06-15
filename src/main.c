@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <mpd/client.h>
+#include <ncurses.h>
 
 int main ()
 {
@@ -26,16 +27,27 @@ int main ()
 		exit(1);
 	}
 
+	initscr();			/* Start curses mode 		  */
+	
 	// we can now use the connection
 	mpd_run_next(conn);
 
-	fprintf(stdout, "Connection opened\n");
+	printw("connection Opened\n");
+	
+	refresh();
 
 	// close the connection and free memory
 	mpd_connection_free(conn);
 
+	printw("Connection Closed\n");
 
-	fprintf(stdout, "Connection closed\n");
+	printw("Hello World !!!");	/* Print Hello World		  */
+	
+	refresh();			/* Print it on to the real screen */
+	
+	getch();			/* Wait for user input */
+	
+	endwin();			/* End curses mode		  */
 
 	return 0;
 }
