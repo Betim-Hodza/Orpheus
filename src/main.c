@@ -7,8 +7,23 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include <mpd/client.h>
 #include <ncurses.h>
+
+typedef struct 
+{
+	WINDOW *header;
+	WINDOW *main_area;
+	WINDOW *footer;
+	int max_rows;
+	int max_cols;
+} UI;
+
+// globals
+struct mpd_connection *conn;
+UI ui;
 
 void validate_connection(struct mpd_connection *conn)
 {
@@ -25,54 +40,110 @@ void validate_connection(struct mpd_connection *conn)
 	}
 }
 
-int main ()
+void init_ui()
 {
-	//vars
-	// used to get characters
-	int ch; 
-	// when connecting to socket, we ignore 2nd field (port), 3rd field is timeout in ms
-	struct mpd_connection *conn = mpd_connection_new("/home/bay/.config/mpd/socket", 0, 0);
+	getmaxyx(stdscr, ui.max_rows, ui.max_cols);
 
-	validate_connection(conn);
-	initscr();							/* Start curses mode 		  */
-	raw();									// line buffering disables
-	keypad(stdscr, TRUE); 	// we get to use arrowkeys and f1, f2, etc..
-	
-	
-	// we can now use the connection
-	mpd_run_next(conn);
-	printw("connection Opened\n");
-	refresh();
+	ui.header = newwin(2, ui.max_cols, 0, 0);
+	ui.main_area = newwin(ui.max_rows - 4, ui.max_cols, 2, 0);
+	ui.footer = newwin(2, ui.max_cols, ui.max_rows - 2, 0);
+}
 
-	/*somewhere between here we need to do fancy stuff for music player (call funcs)*/
+void update_header()
+{
+	time_t now = time(NULL);
+	struct tm *tm = localtime(&now);
+	char time_str[20];
+	strftime(time_str, sizeof(time_str), "%H:%M:S", tm);
 
+	werase(ui.header);
+	box(ui.header, 0, 0);
+	mvwprintw(ui.header, 1, 2, "Time: %s", time_str);
+	wrefresh(ui.header);
+}
 
-	// on quit
-	// close the connection and free memory
-	mpd_connection_free(conn);
-	printw("Connection Closed\n");
+void update_main_area()
+{
+	werase(ui.main_area);
+	box(ui.main_area, 0, 0);
+	mvwprintw(ui.main_area, 1, 2, "CMBP - C-based Music Player");
+	mvwprintw(ui.main_area, 2, 2, "Press 'q' to quit");
+	wrefresh(ui.main_area);
+}
 
-	printw("Hello World !!!\n");	/* Print Hello World		  */
-	refresh();			/* Print it on to the real screen */
+void update_footer()
+{
+	werase(ui.footer);
+	box(ui.footer, 0, 0);
 
-	printw("Type any character to see it in bold\n");
-	ch = getch();
-
-	if(ch == KEY_F(1))
+	// get mpd status
+	mpd_send_status(conn);
+	struct mpd_status *status = mpd_recv_status(conn);
+	if (status)
 	{
-		printw("F1 key pressed \n");
+		switch (mpd_status_get_state(status))
+		{
+			case MPD_STATE_PLAY:
+				// visualizer movement
+				static int pos = 0;
+				pos = (pos + 1) % (ui.max_cols - 4);						
+				mvwprintw(ui.footer, 1, 2 + pos, "|");
+				break;
+			case MPD_STATE_PAUSE:
+				mvwprintw(ui.footer, 1, 2, "Paused");
+				break;
+			case MPD_STATE_STOP:
+				mvwprintw(ui.footer, 1, 2, "Stopped");
+				break;
+			default:
+				mvwprintw(ui.footer, 1, 2, "Unkown (default switch)");
+				break;
+		}
+		mpd_status_free(status);
 	}
 	else
 	{
-		printw("The pressed key is ");
-		attron(A_BOLD);
-		printw("%c", ch);
-		attroff(A_BOLD);
+		mvwprintw(ui.footer, 1, 2, "No Status");
 	}
-	refresh();
+	wrefresh(ui.footer);
+}
+
+void run_tui()
+{
+	int ch;
+	timeout(500);
+	while ((ch = getch()) != 'q')
+	{
+		update_header();
+		update_main_area();
+		update_footer();
+	}
+}
+
+int main ()
+{
+	// init mpd
+	conn = mpd_connection_new("/home/bay/.config/mpd/socket", 0, 0);
+	validate_connection(conn);	
+
+	// init ncurses
+	initscr();									/* Start curses mode 		  */
+	raw();												
+	keypad(stdscr, TRUE); 			
+	noecho();
+	curs_set(0);
 	
-	getch();			/* Wait for user input */
-	endwin();			/* End curses mode		  */
+	// init ui and run it
+	init_ui();
+	run_tui();
+
+	// cleanup
+	delwin(ui.header);
+	delwin(ui.main_area);
+	delwin(ui.footer);
+	endwin();
+	mpd_connection_free(conn);
+
 
 	return 0;
 }
