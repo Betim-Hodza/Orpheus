@@ -295,32 +295,54 @@ void run_tui()
 		}
 		if ( ch == 'p' )
 		{
+			if (!mpd_send_status(conn))
+			{
+					mvwprintw(ui.main_area, ui.item_count + 2, 2, "Failed to get status: %s", 
+										mpd_connection_get_error_message(conn));
+					wrefresh(ui.main_area);
+					mpd_response_finish(conn);
+					break;
+			}
 			struct mpd_status *status = mpd_recv_status(conn);
 			if (status)
 			{
-				switch (mpd_status_get_state(status))
-				{
-					case MPD_STATE_PLAY:
-						if (!mpd_run_play(conn))
-						{
-								mvwprintw(ui.main_area, ui.item_count + 3, 2, "Failed to play: %s", mpd_connection_get_error_message(conn));
-						}						
-						break;
-					case MPD_STATE_PAUSE:
-						if (!mpd_run_pause(conn, true))
-						{
-								mvwprintw(ui.main_area, ui.item_count + 3, 2, "Failed to pause: %s", mpd_connection_get_error_message(conn));
-						}
-						break;
-					case MPD_STATE_STOP:
-						mvwprintw(ui.footer, 1, 2, "Stopped");
-						break;
-					default:
-						mvwprintw(ui.footer, 1, 2, "Unknown (default switch)");
-						break;
-				}
-				mpd_status_free(status);
+					switch (mpd_status_get_state(status))
+					{
+							case MPD_STATE_PLAY:
+									if (mpd_run_pause(conn, true))
+									{
+											mvwprintw(ui.main_area, ui.item_count + 2, 2, "Paused");
+									}
+									else
+									{
+											mvwprintw(ui.main_area, ui.item_count + 2, 2, "Failed to pause: %s", 
+																mpd_connection_get_error_message(conn));
+									}
+									break;
+							case MPD_STATE_PAUSE:
+							case MPD_STATE_STOP:
+									if (mpd_run_play(conn))
+									{
+											mvwprintw(ui.main_area, ui.item_count + 2, 2, "Playing");
+									}
+									else
+									{
+											mvwprintw(ui.main_area, ui.item_count + 2, 2, "Failed to play: %s", 
+																mpd_connection_get_error_message(conn));
+									}
+									break;
+							default:
+									mvwprintw(ui.main_area, ui.item_count + 2, 2, "Unknown playback state");
+									break;
+					}
+					mpd_status_free(status);
 			}
+			else
+			{
+					mvwprintw(ui.main_area, ui.item_count + 2, 2, "No status available");
+			}
+			mpd_response_finish(conn);
+			wrefresh(ui.main_area);			
 		}
 		else if (ui.show_directory_browser) 
 		{
