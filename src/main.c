@@ -272,26 +272,83 @@ void update_footer()
 
 void run_tui() 
 {
+    int current_win = 1; 
     int ch;
     timeout(500);
     while ((ch = getch()) != 'q') 
     {
         // open directory
-        if (ch == 'd') 
-        {
-            ui.show_directory_browser = !ui.show_directory_browser;
-            ui.show_directory_selection = false;
-            if (ui.show_directory_browser) ui.selected_index = 0;
-        } 
+        //if (ch == 'd') 
+        //{
+        //    ui.show_directory_browser = !ui.show_directory_browser;
+        //    ui.show_directory_selection = false;
+        //    if (ui.show_directory_browser) ui.selected_index = 0;
+        //} 
         // help menu
-        if (ch == 'h')
+        //if (ch == 'h')
+        //{
+        //    // want to create a box that hovers over the main screen that shows the how to do everything.
+        //    // WINDOW *win = newwin(10,10,1,1);
+        //    // box(win, '*', '*');
+        //    // touchwin(win);
+        //    // wrefresh(win);
+        //}
+
+        if (ch == KEY_LEFT)
         {
-            // want to create a box that hovers over the main screen that shows the how to do everything.
-            // WINDOW *win = newwin(10,10,1,1);
-            // box(win, '*', '*');
-            // touchwin(win);
-            // wrefresh(win);
+            if (current_win == 1)
+            {
+                current_win = 4;
+            }
+            else 
+            {
+                current_win -= 1;
+            }
         }
+        if (ch == KEY_RIGHT)
+        {
+            if (current_win == 4)
+            {
+                current_win = 1;
+            }
+            else
+            {
+                current_win += 1;
+            }
+        }
+
+        // update current window
+        switch (current_win) 
+        {
+            // home 
+            case 1:
+                ui.show_directory_browser = false;
+                // ui.show_playlists = false
+                // ui.show_help = false
+                break;
+            // directory
+            case 2:
+                ui.show_directory_browser = true;
+                // ui.show_help = false
+                // ui.show_playlists = false 
+                break;
+            // playlist
+            case 3:
+                ui.show_directory_browser = false;
+                // ui.show_playlists = true
+                // ui.show_help = false
+                break;
+            // help
+            case 4:
+                ui.show_directory_browser = false;
+                // ui.show_help = true
+                // ui.show_playlists = false
+                break;
+            default:
+                break;
+        }
+
+
         if (ch == 'p')
         {
             if (!mpd_send_status(conn))
