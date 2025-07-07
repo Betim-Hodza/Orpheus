@@ -326,39 +326,6 @@ void run_tui()
             }
         }
 
-        // update current window
-        switch (current_win) 
-        {
-            // home 
-            case 0:
-                ui.show_directory_browser = false;
-                // ui.show_playlists = false
-                // ui.show_help = false
-                break;
-            // directory
-            case 1:
-                ui.show_directory_browser = true;
-                // ui.show_help = false
-                // ui.show_playlists = false 
-                break;
-            // playlist
-            case 2:
-                ui.show_directory_browser = false;
-                // ui.show_playlists = true
-                // ui.show_help = false
-                break;
-            // help
-            case 3:
-                ui.show_directory_browser = false;
-                // ui.show_help = true
-                // ui.show_playlists = false
-                break;
-            default:
-                break;
-        }
-
-				ui.current_tab = current_win;
-
         if (ch == 'p')
         {
             if (!mpd_send_status(conn))
@@ -492,6 +459,37 @@ void run_tui()
                 ui.input_buffer[ui.input_pos] = '\0';
             }
         }
+        // update current window
+        switch (current_win) 
+        {
+            // home 
+            case 0:
+                ui.show_directory_browser = false;
+                // ui.show_playlists = false
+                // ui.show_help = false
+                break;
+            // directory
+            case 1:
+                ui.show_directory_browser = true;
+                // ui.show_help = false
+                // ui.show_playlists = false 
+                break;
+            // playlist
+            case 2:
+                ui.show_directory_browser = false;
+                // ui.show_playlists = true
+                // ui.show_help = false
+                break;
+            // help
+            case 3:
+                ui.show_directory_browser = false;
+                // ui.show_help = true
+                // ui.show_playlists = false
+                break;
+            default:
+                break;
+        }
+				ui.current_tab = current_win;
 
         update_header();
         update_main_area();
