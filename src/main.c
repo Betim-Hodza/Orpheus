@@ -18,6 +18,15 @@
 
 #define MAX_ITEMS 1000
 #define MAX_PATH 256
+#define TAB_COUNT 4
+
+typedef enum
+{
+	home,
+	directory,
+	queue,
+	help
+} Tab;
 
 typedef struct 
 {
@@ -36,6 +45,7 @@ typedef struct
     bool show_directory_selection;
     char input_buffer[MAX_PATH];
     int input_pos;
+		Tab current_tab;
 } UI;
 
 // globals
@@ -85,11 +95,13 @@ void init_ui(const char *starting_directory)
 {
     getmaxyx(stdscr, ui.max_rows, ui.max_cols);
 
-    ui.header = newwin(2, ui.max_cols, 0, 0);
-    ui.main_area = newwin(ui.max_rows - 4, ui.max_cols, 2, 0);
+		// create new windows
+    ui.header = newwin(3, ui.max_cols, 0, 0);
+    ui.main_area = newwin(ui.max_rows - 5, ui.max_cols, 3, 0);
     ui.directory_selection = newwin(2, ui.max_cols, ui.max_rows - 4, 0);
     ui.footer = newwin(2, ui.max_cols, ui.max_rows - 2, 0);
 
+		// directory setup
     ui.current_directory = strdup(starting_directory ? starting_directory : "");
     ui.item_uris = malloc(MAX_ITEMS * sizeof(char*));
     ui.item_types = malloc(MAX_ITEMS * sizeof(int));
@@ -98,7 +110,8 @@ void init_ui(const char *starting_directory)
     
     ui.show_directory_browser = false;
     ui.show_directory_selection = false;
-    
+    ui.current_tab = home;
+
     strncpy(ui.input_buffer, starting_directory ? starting_directory : "", MAX_PATH - 1);
     ui.input_buffer[MAX_PATH - 1] = '\0';
     ui.input_pos = strlen(ui.input_buffer);
@@ -110,10 +123,27 @@ void update_header()
     struct tm *tm = localtime(&now);
     char time_str[20];
     strftime(time_str, sizeof(time_str), "%I:%M:%S", tm);
-
-    werase(ui.header);
-    box(ui.header, 0, 0);
+		werase(ui.header);
+    
+		// display time
+		box(ui.header, 0, 0);
     mvwprintw(ui.header, 1, 2, "Time: %s", time_str);
+
+		const char *tab_names[] = {"Home", "Directory", "Queue", "Help"};
+    int x_pos = 2;
+    for (int i = 0; i < TAB_COUNT; i++) 
+		{
+        if (i == ui.current_tab) 
+				{
+            wattron(ui.header, A_REVERSE);
+        }
+        mvwprintw(ui.header, 2, x_pos, " %s ", tab_names[i]);
+        if (i == ui.current_tab) 
+				{
+            wattroff(ui.header, A_REVERSE);
+        }
+        x_pos += strlen(tab_names[i]) + 3;
+    }
     wrefresh(ui.header);
 }
 
@@ -213,10 +243,6 @@ void update_main_area()
     else 
     {
         mvwprintw(ui.main_area, 1, 2, "cbmp - C-based Music Player");
-        mvwprintw(ui.main_area, 2, 2, "Press 'd' for browser, 'u' for moving up a dir, '<Enter>' going down dir");
-        mvwprintw(ui.main_area, 3, 2, "Press 'p' to play/pause");
-        mvwprintw(ui.main_area, 4, 2, "Press 'h' for help (WIP)");
-        mvwprintw(ui.main_area, 5, 2, "Press 'q' to quit");
     }
     wrefresh(ui.main_area);
 }
@@ -272,33 +298,16 @@ void update_footer()
 
 void run_tui() 
 {
-    int current_win = 1; 
+    int current_win = 0; 
     int ch;
     timeout(500);
     while ((ch = getch()) != 'q') 
     {
-        // open directory
-        //if (ch == 'd') 
-        //{
-        //    ui.show_directory_browser = !ui.show_directory_browser;
-        //    ui.show_directory_selection = false;
-        //    if (ui.show_directory_browser) ui.selected_index = 0;
-        //} 
-        // help menu
-        //if (ch == 'h')
-        //{
-        //    // want to create a box that hovers over the main screen that shows the how to do everything.
-        //    // WINDOW *win = newwin(10,10,1,1);
-        //    // box(win, '*', '*');
-        //    // touchwin(win);
-        //    // wrefresh(win);
-        //}
-
         if (ch == KEY_LEFT)
         {
-            if (current_win == 1)
+            if (current_win == 0)
             {
-                current_win = 4;
+                current_win = 3;
             }
             else 
             {
@@ -307,9 +316,9 @@ void run_tui()
         }
         if (ch == KEY_RIGHT)
         {
-            if (current_win == 4)
+            if (current_win == 3)
             {
-                current_win = 1;
+                current_win = 0;
             }
             else
             {
@@ -321,25 +330,25 @@ void run_tui()
         switch (current_win) 
         {
             // home 
-            case 1:
+            case 0:
                 ui.show_directory_browser = false;
                 // ui.show_playlists = false
                 // ui.show_help = false
                 break;
             // directory
-            case 2:
+            case 1:
                 ui.show_directory_browser = true;
                 // ui.show_help = false
                 // ui.show_playlists = false 
                 break;
             // playlist
-            case 3:
+            case 2:
                 ui.show_directory_browser = false;
                 // ui.show_playlists = true
                 // ui.show_help = false
                 break;
             // help
-            case 4:
+            case 3:
                 ui.show_directory_browser = false;
                 // ui.show_help = true
                 // ui.show_playlists = false
@@ -348,6 +357,7 @@ void run_tui()
                 break;
         }
 
+				ui.current_tab = current_win;
 
         if (ch == 'p')
         {
