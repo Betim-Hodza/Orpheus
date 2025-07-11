@@ -43,6 +43,7 @@ typedef struct
     int selected_index;
     bool show_directory_browser;
     bool show_directory_selection;
+		bool show_help;
     char input_buffer[MAX_PATH];
     int input_pos;
 		Tab current_tab;
@@ -109,6 +110,7 @@ void init_ui(const char *starting_directory)
     ui.selected_index = 0;
     
     ui.show_directory_browser = false;
+		ui.show_help = false;
     ui.show_directory_selection = false;
     ui.current_tab = home;
 
@@ -232,6 +234,21 @@ void update_directory_selection()
     wrefresh(ui.directory_selection);
 }
 
+void help_screen()
+{
+		werase(ui.main_area);
+		box(ui.main_area, 0, 0);
+
+		mvwprintw(ui.main_area, 1, 2, "Help:");
+		mvwprintw(ui.main_area, 2, 2, "P              | Play/Pause");
+		mvwprintw(ui.main_area, 3, 2, "<LEFT> <RIGHT> | Move to tabs left or right (cycles)");
+		mvwprintw(ui.main_area, 5, 2, "Directory Help:");
+		mvwprintw(ui.main_area, 6, 2, "<UP> <DOWN>    | Scrolls up and down a list");
+		mvwprintw(ui.main_area, 7, 2, "U              | Goes up a directory]");
+		mvwprintw(ui.main_area, 8, 2, "<ENTER>        | Goes down a directory and adds song to que");
+		wrefresh(ui.main_area);
+}
+
 void update_main_area() 
 {
     werase(ui.main_area);
@@ -239,7 +256,11 @@ void update_main_area()
     if (ui.show_directory_browser) 
     {
         update_directory_browser();
-    } 
+    }
+		else if (ui.show_help)
+		{
+				help_screen();
+		}
     else 
     {
         mvwprintw(ui.main_area, 1, 2, "cbmp - C-based Music Player");
@@ -466,24 +487,24 @@ void run_tui()
             case 0:
                 ui.show_directory_browser = false;
                 // ui.show_playlists = false
-                // ui.show_help = false
+                ui.show_help = false;
                 break;
             // directory
             case 1:
                 ui.show_directory_browser = true;
-                // ui.show_help = false
+                ui.show_help = false;
                 // ui.show_playlists = false 
                 break;
             // playlist
             case 2:
                 ui.show_directory_browser = false;
                 // ui.show_playlists = true
-                // ui.show_help = false
+                ui.show_help = false;
                 break;
             // help
             case 3:
                 ui.show_directory_browser = false;
-                // ui.show_help = true
+                ui.show_help = true;
                 // ui.show_playlists = false
                 break;
             default:
@@ -493,14 +514,12 @@ void run_tui()
 
         update_header();
         update_main_area();
-        if (ui.show_directory_selection) update_directory_selection();
         update_footer();
     }
 }
 
 int main()
 {
-    // init lua config
     char *starting_directory = strdup("");
     char *connection_type = NULL;
     char *socket_path = NULL;
@@ -511,20 +530,18 @@ int main()
     luaL_openlibs(L);
     if (luaL_dofile(L, "config.lua") == LUA_OK)
     {
-        // Read music_directory
         lua_getglobal(L, "music_directory");
         if (lua_isstring(L, -1))
         {
             const char *lua_path = lua_tostring(L, -1);
-            // Expand ~ if present
             if (lua_path[0] == '~' && (lua_path[1] == '/' || lua_path[1] == '\0'))
             {
                 const char *home = getenv("HOME");
                 if (home)
                 {
                     size_t home_len = strlen(home);
-                    size_t path_len = strlen(lua_path + 1); // Skip ~
-                    char *expanded = malloc(home_len + path_len + 2); // +2 for '/' and '\0'
+                    size_t path_len = strlen(lua_path + 1);
+                    char *expanded = malloc(home_len + path_len + 2);
                     strcpy(expanded, home);
                     if (path_len > 0 && lua_path[1] == '/')
                         strcat(expanded, lua_path + 1);
@@ -543,19 +560,18 @@ int main()
                 starting_directory = strdup(lua_path);
             }
             // Convert absolute path to relative if it starts with MPD's music_directory
-            const char *mpd_music_dir = "/home/bay/Music"; // Adjust based on mpd.conf
+            const char *mpd_music_dir = "/home/bay/Music";
             size_t mpd_len = strlen(mpd_music_dir);
-            if (strncmp(starting_directory, mpd_music_dir, mpd_len) == 0)
+            if (strncmp(starting_directory, mpd_music_dir, mpd_len) == 0 && 
+                (starting_directory[mpd_len] == '/' || starting_directory[mpd_len] == '\0'))
             {
-                char *relative = strdup(starting_directory + mpd_len);
-                if (relative[0] == '/') memmove(relative, relative + 1, strlen(relative));
+                char *relative = strdup(starting_directory + mpd_len + (starting_directory[mpd_len] == '/' ? 1 : 0));
                 free(starting_directory);
                 starting_directory = relative;
             }
         }
         lua_pop(L, 1);
 
-        // Read connection_type
         lua_getglobal(L, "connection_type");
         if (lua_isstring(L, -1))
         {
@@ -563,7 +579,6 @@ int main()
         }
         lua_pop(L, 1);
 
-        // Read socket_path
         lua_getglobal(L, "socket_path");
         if (lua_isstring(L, -1))
         {
@@ -571,7 +586,6 @@ int main()
         }
         lua_pop(L, 1);
 
-        // Read host
         lua_getglobal(L, "host");
         if (lua_isstring(L, -1))
         {
@@ -579,7 +593,6 @@ int main()
         }
         lua_pop(L, 1);
 
-        // Read port
         lua_getglobal(L, "port");
         if (lua_isnumber(L, -1))
         {
@@ -589,7 +602,6 @@ int main()
     }
     lua_close(L);
 
-    // Set default connection parameters if not specified
     if (!connection_type)
     {
         connection_type = strdup("socket");
@@ -604,10 +616,9 @@ int main()
     }
     if (port == 0 && strcmp(connection_type, "network") == 0)
     {
-        port = 6600; // Default MPD port
+        port = 6600;
     }
 
-    // init mpd
     if (strcmp(connection_type, "socket") == 0)
     {
         conn = mpd_connection_new(socket_path, 0, 0);
@@ -628,24 +639,20 @@ int main()
     }
     validate_connection(conn);
 
-    // Clean up connection parameters
     free(connection_type);
     free(socket_path);
     free(host);
 
-    // init ncurses
-    initscr();                                    /* Start curses mode          */
-    raw();                                                
-    keypad(stdscr, TRUE);             
+    initscr();
+    raw();
+    keypad(stdscr, TRUE);
     noecho();
     curs_set(0);
     
-    // init ui and run it
     init_ui(starting_directory);
     free(starting_directory);
     run_tui();
 
-    // cleanup
     free(ui.current_directory);
     for (int i = 0; i < ui.item_count; i++)
     {
