@@ -14,19 +14,19 @@ set(CMAKE_BUILD_TYPE Debug)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBMPDCLIENT REQUIRED libmpdclient)
 if(NOT LIBMPDCLIENT_FOUND)
-    message(FATAL_ERROR "libmpdclient not found. Please install libmpdclient-dev or libmpdclient-devel.")
+    message(FATAL_ERROR "libmpdclient not found. Please install libmpdclient-dev (Debian/Ubuntu) or libmpdclient-devel (Fedora).")
 endif()
 
 # Find ncurses
 find_package(Curses REQUIRED)
 if(NOT CURSES_FOUND)
-    message(FATAL_ERROR "ncurses not found. Please install libncurses5-dev or ncurses-devel.")
+    message(FATAL_ERROR "ncurses not found. Please install libncurses5-dev (Debian/Ubuntu) or ncurses-devel (Fedora).")
 endif()
 
-# Find Lua
+# Find Lua 5.3
 find_package(Lua 5.3 REQUIRED)
 if(NOT LUA_FOUND)
-    message(FATAL_ERROR "Lua 5.3 not found. Please install liblua5.3-dev or lua-devel.")
+    message(FATAL_ERROR "Lua 5.3 not found. Please install liblua5.3-dev (Debian/Ubuntu) or lua-devel (Fedora).")
 endif()
 
 # Add executable
@@ -46,6 +46,12 @@ target_link_libraries(orpheus
         ${LIBMPDCLIENT_LIBRARIES}
         ${CURSES_LIBRARIES}
         ${LUA_LIBRARIES}
+)
+
+# Compiler warnings and optimizations
+target_compile_options(orpheus
+    PRIVATE
+        -Wall -Wextra -Wpedantic
 )
 
 # Set output directory for the executable

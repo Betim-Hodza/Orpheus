@@ -92,6 +92,7 @@ char *get_parent_directory(const char *path)
     return parent;
 }
 
+// initialize UI
 void init_ui(const char *starting_directory)
 {
     getmaxyx(stdscr, ui.max_rows, ui.max_cols);
@@ -106,14 +107,24 @@ void init_ui(const char *starting_directory)
     ui.current_directory = strdup(starting_directory ? starting_directory : "");
     ui.item_uris = malloc(MAX_ITEMS * sizeof(char*));
     ui.item_types = malloc(MAX_ITEMS * sizeof(int));
-    ui.item_count = 0;
-    ui.selected_index = 0;
+		// check for malloc failures
+		if (!ui.item_uris || !ui.item_types) 
+		{
+    	fprintf(stderr, "Memory allocation failed\n");
+    	endwin();
+    	exit(1);
+		}
     
+		ui.item_count = 0;
+    ui.selected_index = 0;
+   	
+		// bools and where we are
     ui.show_directory_browser = false;
 		ui.show_help = false;
     ui.show_directory_selection = false;
     ui.current_tab = home;
 
+		// current path and input buffer
     strncpy(ui.input_buffer, starting_directory ? starting_directory : "", MAX_PATH - 1);
     ui.input_buffer[MAX_PATH - 1] = '\0';
     ui.input_pos = strlen(ui.input_buffer);
@@ -151,6 +162,12 @@ void update_header()
 
 void update_directory_browser()
 {
+		for (int i = 0; i < MAX_ITEMS; i++) 
+		{
+    	ui.item_uris[i] = NULL;
+    	ui.item_types[i] = 0;
+		}
+
     for (int i = 0; i < ui.item_count; i++)
     {
         if (ui.item_uris[i]) free(ui.item_uris[i]);
@@ -263,7 +280,7 @@ void update_main_area()
 		}
     else 
     {
-        mvwprintw(ui.main_area, 1, 2, "cbmp - C-based Music Player");
+        mvwprintw(ui.main_area, 1, 2, "Orpeus - C-based Music Player");
     }
     wrefresh(ui.main_area);
 }
@@ -322,8 +339,11 @@ void run_tui()
     int current_win = 0; 
     int ch;
     timeout(500);
+		
+		// while we haven't quit
     while ((ch = getch()) != 'q') 
     {
+				// looping window tabs
         if (ch == KEY_LEFT)
         {
             if (current_win == 0)
@@ -347,6 +367,7 @@ void run_tui()
             }
         }
 
+				// play / pause
         if (ch == 'p')
         {
             if (!mpd_send_status(conn))
@@ -357,11 +378,14 @@ void run_tui()
                 mpd_response_finish(conn);
                 break;
             }
+
+						// get status to switch play / pause
             struct mpd_status *status = mpd_recv_status(conn);
             if (status)
             {
                 switch (mpd_status_get_state(status))
                 {
+										// switch play -> pause or fail
                     case MPD_STATE_PLAY:
                         if (mpd_run_pause(conn, true))
                         {
@@ -374,7 +398,9 @@ void run_tui()
                         }
                         break;
                     case MPD_STATE_PAUSE:
-                    case MPD_STATE_STOP:
+                    
+										// switch stop -> play and pause -> play (same action)
+										case MPD_STATE_STOP:
                         if (mpd_run_play(conn))
                         {
                             mvwprintw(ui.main_area, ui.item_count + 2, 2, "Playing");
@@ -385,6 +411,8 @@ void run_tui()
                                       mpd_connection_get_error_message(conn));
                         }
                         break;
+
+										// unknown state
                     default:
                         mvwprintw(ui.main_area, ui.item_count + 2, 2, "Unknown playback state");
                         break;
@@ -398,22 +426,28 @@ void run_tui()
             mpd_response_finish(conn);
             wrefresh(ui.main_area);            
         }
+
+				// once we enter in the directory browser we can search for music in the user defined dir
         else if (ui.show_directory_browser) 
         {
             // explore directory
             switch (ch) 
             {
+								// scroll up and down 
                 case KEY_UP:
                     if (ui.selected_index > 0) ui.selected_index--;
                     break;
                 case KEY_DOWN:
                     if (ui.selected_index < ui.item_count - 1) ui.selected_index++;
                     break;
+
+								// select a directory or add song to queue
                 case '\n':
                     if (ui.item_count == 0 || ui.selected_index < 0 || ui.selected_index >= ui.item_count)
                     {
                         break; // No valid selection
                     }
+										// go down directory
                     if (ui.item_types[ui.selected_index] == 0) 
                     {
                         char *new_dir = ui.item_uris[ui.selected_index];
@@ -421,6 +455,7 @@ void run_tui()
                         ui.current_directory = strdup(new_dir);
                         ui.selected_index = 0;
                     }
+										// add song to queue
                     else 
                     {
                         if (mpd_run_add(conn, ui.item_uris[ui.selected_index]))
@@ -441,6 +476,7 @@ void run_tui()
                         mpd_response_finish(conn);    
                     }
                     break;
+								// go up a dir
                 case 'u':
                     char *parent = get_parent_directory(ui.current_directory);
                     if (parent) 
@@ -480,6 +516,7 @@ void run_tui()
                 ui.input_buffer[ui.input_pos] = '\0';
             }
         }
+
         // update current window
         switch (current_win) 
         {
@@ -528,6 +565,8 @@ int main()
 
     lua_State *L = luaL_newstate();
     luaL_openlibs(L);
+
+		// as of now assume config is in current dir
     if (luaL_dofile(L, "config.lua") == LUA_OK)
     {
         lua_getglobal(L, "music_directory");
@@ -539,6 +578,7 @@ int main()
                 const char *home = getenv("HOME");
                 if (home)
                 {
+										// get home path
                     size_t home_len = strlen(home);
                     size_t path_len = strlen(lua_path + 1);
                     char *expanded = malloc(home_len + path_len + 2);
@@ -562,6 +602,9 @@ int main()
             // Convert absolute path to relative if it starts with MPD's music_directory
             const char *mpd_music_dir = "/home/bay/Music";
             size_t mpd_len = strlen(mpd_music_dir);
+
+						// Check if starting_directory begins with mpd_music_dir (length mpd_len) and is either
+						// exactly mpd_music_dir or a subdirectory (ends with '/' or '\0')	
             if (strncmp(starting_directory, mpd_music_dir, mpd_len) == 0 && 
                 (starting_directory[mpd_len] == '/' || starting_directory[mpd_len] == '\0'))
             {
@@ -572,6 +615,7 @@ int main()
         }
         lua_pop(L, 1);
 
+				// get lua configuration
         lua_getglobal(L, "connection_type");
         if (lua_isstring(L, -1))
         {
@@ -602,24 +646,26 @@ int main()
     }
     lua_close(L);
 
+		// how we will define connection type
     if (!connection_type)
     {
         connection_type = strdup("socket");
     }
-    if (!socket_path && strcmp(connection_type, "socket") == 0)
+		else if (!socket_path && strcmp(connection_type, "socket") == 0)
     {
         socket_path = strdup("/home/bay/.config/mpd/socket");
     }
-    if (!host && strcmp(connection_type, "network") == 0)
+		else if (!host && strcmp(connection_type, "network") == 0)
     {
         host = strdup("localhost");
     }
-    if (port == 0 && strcmp(connection_type, "network") == 0)
+    else if (port == 0 && strcmp(connection_type, "network") == 0)
     {
         port = 6600;
     }
 
-    if (strcmp(connection_type, "socket") == 0)
+		// make mpd connection
+		if (strcmp(connection_type, "socket") == 0)
     {
         conn = mpd_connection_new(socket_path, 0, 0);
     }
@@ -638,21 +684,24 @@ int main()
         exit(1);
     }
     validate_connection(conn);
-
+		
     free(connection_type);
     free(socket_path);
     free(host);
 
+		// init ncurses
     initscr();
     raw();
     keypad(stdscr, TRUE);
     noecho();
     curs_set(0);
     
+		// initialize our ui and run the ui
     init_ui(starting_directory);
     free(starting_directory);
     run_tui();
 
+		// after done looping clean up
     free(ui.current_directory);
     for (int i = 0; i < ui.item_count; i++)
     {
