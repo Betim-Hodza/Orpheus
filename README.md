@@ -15,6 +15,7 @@ A Terminal User Interface (TUI) music player that interfaces with MPD (Music Pla
 * libmpdclient
 * ncurses
 * lua5.3
+* libjpeg-turbo
 * C compiler (gcc/clang)
 * cmake
 * pkg-config
@@ -23,12 +24,12 @@ A Terminal User Interface (TUI) music player that interfaces with MPD (Music Pla
 
 On Debian/Ubuntu:
 ```bash
-sudo apt-get install libmpdclient-dev libncurses5-dev liblua5.3-dev build-essential cmake pkg-config
+sudo apt-get install libmpdclient-dev libncurses5-dev liblua5.3-dev libjpeg-turbo build-essential cmake pkg-config 
 
 ```
 On Fedora:
 ```bash
-sudo dnf install libmpdclient-devel ncurses-devel lua-devel gcc cmake pkgconf
+sudo dnf install libmpdclient-devel ncurses-devel lua-devel libjpeg-turbo gcc cmake pkgconf
 ```
 ## Building
 ```

@@ -1,52 +1,35 @@
 cmake_minimum_required(VERSION 3.10)
-
 # Project name and version
 project(orpheus VERSION 1.0 LANGUAGES C)
 
-# Set C standard
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Enable debugging symbols
 set(CMAKE_BUILD_TYPE Debug)
 
-# Find libmpdclient
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBMPDCLIENT REQUIRED libmpdclient)
-if(NOT LIBMPDCLIENT_FOUND)
-    message(FATAL_ERROR "libmpdclient not found. Please install libmpdclient-dev (Debian/Ubuntu) or libmpdclient-devel (Fedora).")
-endif()
+pkg_check_modules(MPDCLIENT REQUIRED libmpdclient)
+pkg_check_modules(NCURSES REQUIRED ncurses)
+pkg_check_modules(LUA REQUIRED lua)  # Adjust to your Lua version if needed, e.g., lua5.4
+pkg_check_modules(JPG REQUIRED libjpeg)  # Use libjpeg instead of libjpeg-turbo
 
-# Find ncurses
-find_package(Curses REQUIRED)
-if(NOT CURSES_FOUND)
-    message(FATAL_ERROR "ncurses not found. Please install libncurses5-dev (Debian/Ubuntu) or ncurses-devel (Fedora).")
-endif()
+include_directories(${CMAKE_SOURCE_DIR}/include ${MPDCLIENT_INCLUDE_DIRS} ${NCURSES_INCLUDE_DIRS} ${LUA_INCLUDE_DIRS} ${JPG_INCLUDE_DIRS})
 
-# Find Lua 5.3
-find_package(Lua 5.3 REQUIRED)
-if(NOT LUA_FOUND)
-    message(FATAL_ERROR "Lua 5.3 not found. Please install liblua5.3-dev (Debian/Ubuntu) or lua-devel (Fedora).")
-endif()
-
-# Add executable
-add_executable(orpheus src/main.c)
-
-# Include directories
-target_include_directories(orpheus
-    PRIVATE
-        ${LIBMPDCLIENT_INCLUDE_DIRS}
-        ${CURSES_INCLUDE_DIR}
-        ${LUA_INCLUDE_DIR}
+set(SOURCES
+    src/main.c
+    src/mpd_connections.c
+    src/ascii_art.c
 )
 
-# Link libraries
-target_link_libraries(orpheus
-    PRIVATE
-        ${LIBMPDCLIENT_LIBRARIES}
-        ${CURSES_LIBRARIES}
-        ${LUA_LIBRARIES}
-)
+add_executable(orpheus ${SOURCES})
+
+target_link_libraries(orpheus PRIVATE ${MPDCLIENT_LIBRARIES} ${NCURSES_LIBRARIES} ${LUA_LIBRARIES} ${JPG_LIBRARIES})
+
+install(TARGETS orpheus DESTINATION bin)
+
+cmake_minimum_required(VERSION 3.10)
+
 
 # Compiler warnings and optimizations
 target_compile_options(orpheus

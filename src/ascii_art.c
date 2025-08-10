@@ -2,11 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <jpeglib.h>
-#include "ascii_art.h"
+#include "../include/ascii_art.h"
 
-AsciiArt *jpeg_to_ascii(const char *image_path, int ascii_width, int max_height) {
+AsciiArt *jpeg_to_ascii(const char *image_path, int ascii_width, int max_height) 
+{
     // Validate inputs
-    if (!image_path || ascii_width <= 0 || max_height <= 0) {
+    if (!image_path || ascii_width <= 0 || max_height <= 0) 
+    {
         return NULL;
     }
 
@@ -18,7 +20,8 @@ AsciiArt *jpeg_to_ascii(const char *image_path, int ascii_width, int max_height)
 
     // Open JPEG file
     FILE *infile = fopen(image_path, "rb");
-    if (!infile) {
+    if (!infile) 
+    {
         jpeg_destroy_decompress(&cinfo);
         return NULL;
     }
@@ -37,7 +40,8 @@ AsciiArt *jpeg_to_ascii(const char *image_path, int ascii_width, int max_height)
 
     // Allocate image data array
     unsigned char *image = malloc(width * height);
-    if (!image) {
+    if (!image) 
+    {
         fclose(infile);
         jpeg_destroy_decompress(&cinfo);
         return NULL;
@@ -46,7 +50,8 @@ AsciiArt *jpeg_to_ascii(const char *image_path, int ascii_width, int max_height)
     // Read image data
     JSAMPARRAY buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
     int y = 0;
-    while (cinfo.output_scanline < cinfo.output_height) {
+    while (cinfo.output_scanline < cinfo.output_height) 
+    {
         jpeg_read_scanlines(&cinfo, buffer, 1);
         memcpy(image + y * width, buffer[0], width);
         y++;
@@ -60,25 +65,30 @@ AsciiArt *jpeg_to_ascii(const char *image_path, int ascii_width, int max_height)
     // Calculate ASCII art height, adjusting for 2:1 character aspect ratio
     float aspect_ratio = (float)height / width;
     int ascii_height = (int)(aspect_ratio * ascii_width / 2.0 + 0.5);
-    if (ascii_height > max_height) {
+    if (ascii_height > max_height) 
+    {
         ascii_height = max_height;
     }
 
     // Allocate AsciiArt structure
     AsciiArt *art = malloc(sizeof(AsciiArt));
-    if (!art) {
+    if (!art) 
+    {
         free(image);
         return NULL;
     }
     art->lines = malloc(ascii_height * sizeof(char *));
-    if (!art->lines) {
+    if (!art->lines) 
+    {
         free(image);
         free(art);
         return NULL;
     }
-    for (int i = 0; i < ascii_height; i++) {
+    for (int i = 0; i < ascii_height; i++) 
+    {
         art->lines[i] = malloc(ascii_width + 1);
-        if (!art->lines[i]) {
+        if (!art->lines[i]) 
+        {
             for (int j = 0; j < i; j++) free(art->lines[j]);
             free(art->lines);
             free(art);
@@ -94,8 +104,10 @@ AsciiArt *jpeg_to_ascii(const char *image_path, int ascii_width, int max_height)
     int num_chars = strlen(ascii_chars);
 
     // Generate ASCII art
-    for (int r = 0; r < ascii_height; r++) {
-        for (int c = 0; c < ascii_width; c++) {
+    for (int r = 0; r < ascii_height; r++) 
+    {
+        for (int c = 0; c < ascii_width; c++) 
+        {
             // Sample the corresponding pixel
             int x = (c * width) / ascii_width;
             int y = (r * height) / ascii_height;
@@ -113,9 +125,11 @@ AsciiArt *jpeg_to_ascii(const char *image_path, int ascii_width, int max_height)
     return art;
 }
 
-void ascii_art_free(AsciiArt *art) {
+void ascii_art_free(AsciiArt *art) 
+{
     if (!art) return;
-    for (int i = 0; i < art->num_lines; i++) {
+    for (int i = 0; i < art->num_lines; i++) 
+    {
         if (art->lines[i]) free(art->lines[i]);
     }
     free(art->lines);

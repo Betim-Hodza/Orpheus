@@ -15,6 +15,7 @@
 #include <lauxlib.h>
 #include <lualib.h>
 #include <stdbool.h>
+#include "../include/mpd_connections.h"
 
 #define MAX_ITEMS 1000
 #define MAX_PATH 256
@@ -53,22 +54,7 @@ typedef struct
 struct mpd_connection *conn;
 UI ui;
 
-void validate_connection(struct mpd_connection *conn)
-{
-    if (conn == NULL) 
-    {
-        fprintf(stderr, "Out of memory\n");
-        if (isendwin() == FALSE) endwin();
-        exit(1);
-    }
-    if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) 
-    {
-        fprintf(stderr, "MPD error: %s\n", mpd_connection_get_error_message(conn));
-        mpd_connection_free(conn);
-        if (isendwin() == FALSE) endwin();
-        exit(1);
-    }
-}
+
 
 char *get_parent_directory(const char *path)
 {
@@ -146,12 +132,12 @@ void update_header()
     int x_pos = 2;
     for (int i = 0; i < TAB_COUNT; i++) 
 		{
-        if (i == ui.current_tab) 
+        if ((Tab)i == ui.current_tab) 
 				{
             wattron(ui.header, A_REVERSE);
         }
         mvwprintw(ui.header, 2, x_pos, " %s ", tab_names[i]);
-        if (i == ui.current_tab) 
+        if ((Tab)i == ui.current_tab) 
 				{
             wattroff(ui.header, A_REVERSE);
         }
@@ -566,7 +552,7 @@ int main()
     lua_State *L = luaL_newstate();
     luaL_openlibs(L);
 
-		// as of now assume config is in current dir
+    // as of now assume config is in current dir
     if (luaL_dofile(L, "config.lua") == LUA_OK)
     {
         lua_getglobal(L, "music_directory");
@@ -615,7 +601,7 @@ int main()
         }
         lua_pop(L, 1);
 
-				// get lua configuration
+        // get lua configuration
         lua_getglobal(L, "connection_type");
         if (lua_isstring(L, -1))
         {
@@ -651,11 +637,11 @@ int main()
     {
         connection_type = strdup("socket");
     }
-		else if (!socket_path && strcmp(connection_type, "socket") == 0)
+    else if (!socket_path && strcmp(connection_type, "socket") == 0)
     {
         socket_path = strdup("/home/bay/.config/mpd/socket");
     }
-		else if (!host && strcmp(connection_type, "network") == 0)
+    else if (!host && strcmp(connection_type, "network") == 0)
     {
         host = strdup("localhost");
     }
@@ -664,8 +650,8 @@ int main()
         port = 6600;
     }
 
-		// make mpd connection
-		if (strcmp(connection_type, "socket") == 0)
+    // make mpd connection
+    if (strcmp(connection_type, "socket") == 0)
     {
         conn = mpd_connection_new(socket_path, 0, 0);
     }
