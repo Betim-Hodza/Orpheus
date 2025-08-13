@@ -1,5 +1,6 @@
 #include "../include/mpd_connections.h"
 
+// validates a mpd connection given the mpd struct
 void validate_connection(struct mpd_connection *conn)
 {
     if (conn == NULL) 

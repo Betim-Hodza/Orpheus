@@ -19,6 +19,7 @@ include_directories(${CMAKE_SOURCE_DIR}/include ${MPDCLIENT_INCLUDE_DIRS} ${NCUR
 set(SOURCES
     src/main.c
     src/mpd_connections.c
+    src/ui.c
     src/ascii_art.c
 )
 
