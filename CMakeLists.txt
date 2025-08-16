@@ -21,6 +21,7 @@ set(SOURCES
     src/mpd_connections.c
     src/ui.c
     src/ascii_art.c
+    src/lua_config.c
 )
 
 add_executable(orpheus ${SOURCES})
