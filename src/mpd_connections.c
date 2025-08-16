@@ -1,11 +1,12 @@
 #include "../include/mpd_connections.h"
 
+
 // validates a mpd connection given the mpd struct
 void validate_connection(struct mpd_connection *conn)
 {
     if (conn == NULL) 
     {
-        fprintf(stderr, "Out of memory\n");
+        perror("CONN == NULL ? we dont know what happened");
         if (isendwin() == FALSE) endwin();
         exit(1);
     }

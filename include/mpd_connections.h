@@ -7,7 +7,9 @@
 // indirectly used
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
+// validate that connection
 void validate_connection(struct mpd_connection *conn);
 
 

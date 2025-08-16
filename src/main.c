@@ -5,10 +5,8 @@
 // * note: want to create config file in lua, will learn how to do so
 // * support both unix socket and loopback network connections
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <mpd/client.h>
 #include <ncurses.h>
 #include <lua.h>
@@ -26,15 +24,16 @@ UI ui;
 
 int main()
 {
+    // local to main
     char *starting_directory = strdup("");
     char *connection_type = NULL;
     char *socket_path = NULL;
     char *host = NULL;
     int port = 0;
 
+    // setup lua
     lua_State *L = luaL_newstate();
     luaL_openlibs(L);
-
     config_lua(L, starting_directory, connection_type, socket_path, host, &port);
 
     // how we will define connection type
@@ -55,7 +54,7 @@ int main()
         port = 6600;
     }
 
-    // make mpd connection
+    // make our mpd connection
     if (strcmp(connection_type, "socket") == 0)
     {
         conn = mpd_connection_new(socket_path, 0, 0);
@@ -76,21 +75,35 @@ int main()
     }
     validate_connection(conn);
 		
+    // clean up temp vars
     free(connection_type);
     free(socket_path);
     free(host);
 
-		// init ncurses
+    printf("Before init ncurses\n");
+
+    // init ncurses
     initscr();
     raw();
     keypad(stdscr, TRUE);
     noecho();
     curs_set(0);
     
-    // initialize our ui and run the ui
+    printf("After init ncurses \n");
+
+    printf("Before init ui \n");
+
+    // initialize our ui
     init_ui(starting_directory, &ui);
     free(starting_directory);
+
+    printf("After init ui \n");
+
+    printf("Before run tui \n");
+
+    // run tui
     run_tui(conn, &ui);
+    // clean up when user exits
     clean_tui(&ui);
     mpd_connection_free(conn);
 
