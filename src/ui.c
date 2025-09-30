@@ -293,20 +293,24 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
     // }
 
     // Display current song info
-    if (mpd_send_current_song(conn)) 
+    struct mpd_song *song = mpd_run_current_song(conn);
+    if (song == NULL) 
     {
-      struct mpd_song *song = mpd_recv_song(conn);
-      if (song) 
-      {
-        mvwprintw(ui->main_area, ui->max_rows - 5, 2, "Now Playing: %s - %s",
-          mpd_song_get_tag(song, MPD_TAG_ARTIST, 0) ? 
-          mpd_song_get_tag(song, MPD_TAG_ARTIST, 0) : "Unknown Artist",
-          mpd_song_get_tag(song, MPD_TAG_TITLE, 0) ? 
-          mpd_song_get_tag(song, MPD_TAG_TITLE, 0) : "Unknown Title");
-        mpd_song_free(song);
-      }
-      mpd_response_finish(conn);
-    }
+      printf("No song currently playing.\n");
+    } 
+    else
+    {
+      // Extract and print song info
+      const char *artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
+      const char *title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
+      const char *album = mpd_song_get_tag(song, MPD_TAG_ALBUM, 0);
+
+      mvwprintw(ui->main_area, 15, 2, "Artist: %s\n", artist ? artist : "Unknown");
+      mvwprintw(ui->main_area, 16, 2, "Title: %s\n", title ? title : "Unknown");
+      mvwprintw(ui->main_area, 17, 2, "Album: %s\n", album ? album : "Unknown");
+
+      mpd_song_free(song);
+    } 
 
   }
   wrefresh(ui->main_area);
