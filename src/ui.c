@@ -226,13 +226,14 @@ void help_screen(UI *ui)
     werase(ui->main_area);
     box(ui->main_area, 0, 0);
 
-    mvwprintw(ui->main_area, 1, 2, "Help:");
+    mvwprintw(ui->main_area, 1, 2, "Main Help:");
     mvwprintw(ui->main_area, 2, 2, "P              | Play/Pause");
-    mvwprintw(ui->main_area, 3, 2, "<LEFT> <RIGHT> | Move to tabs left or right (cycles)");
-    mvwprintw(ui->main_area, 5, 2, "Directory Help:");
-    mvwprintw(ui->main_area, 6, 2, "<UP> <DOWN>    | Scrolls up and down a list");
-    mvwprintw(ui->main_area, 7, 2, "U              | Goes up a directory]");
-    mvwprintw(ui->main_area, 8, 2, "<ENTER>        | Goes down a directory and adds song to que");
+    mvwprintw(ui->main_area, 3, 2, "'[' ']'        | Prev song, Next song");
+    mvwprintw(ui->main_area, 4, 2, "<LEFT> <RIGHT> | Move to tabs left or right (cycles)");
+    mvwprintw(ui->main_area, 6, 2, "Directory Help:");
+    mvwprintw(ui->main_area, 7, 2, "<UP> <DOWN>    | Scrolls up and down a list");
+    mvwprintw(ui->main_area, 8, 2, "U              | Goes up a directory]");
+    mvwprintw(ui->main_area, 9, 2, "<ENTER>        | Goes down a directory and adds song to que");
     wrefresh(ui->main_area);
 }
 
@@ -259,37 +260,37 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
     mvwprintw(ui->main_area, 1, 2, "Orpeus - C-based Music Player");
     
     // Fetch and display album art as ASCII
-    const char *temp_file = "/tmp/orpeus_album_art.jpg";
-    if (fetch_album_art(conn, temp_file) == 0) 
-    {
-      // Convert JPEG to ASCII art
-      int ascii_width = ui->max_cols - 4; // Fit within window borders
-      int max_height = ui->max_rows - 7; // Leave space for text and borders
-      AsciiArt *art = jpeg_to_ascii(temp_file, ascii_width, max_height);
+    // const char *temp_file = "/tmp/orpeus_album_art.jpg";
+    // if (fetch_album_art(conn, temp_file) == 0) 
+    // {
+    //   // Convert JPEG to ASCII art
+    //   int ascii_width = ui->max_cols - 4; // Fit within window borders
+    //   int max_height = ui->max_rows - 7; // Leave space for text and borders
+    //   AsciiArt *art = jpeg_to_ascii(temp_file, ascii_width, max_height);
       
-      if (art && art->num_lines > 0) 
-      {
-        // Display ASCII art centered in the main area
-        int start_y = 3; // Start below the title
-        int start_x = (ui->max_cols - art->max_width) / 2; // Center horizontally
-        for (int i = 0; i < art->num_lines && start_y + i < ui->max_rows - 4; i++) 
-        {
-          mvwprintw(ui->main_area, start_y + i, start_x, "%s", art->lines[i]);
-        }
-        ascii_art_free(art);
-      } 
-      else 
-      {
-        mvwprintw(ui->main_area, 3, 2, "No album art available or conversion failed");
-      }
+    //   if (art && art->num_lines > 0) 
+    //   {
+    //     // Display ASCII art centered in the main area
+    //     int start_y = 3; // Start below the title
+    //     int start_x = (ui->max_cols - art->max_width) / 2; // Center horizontally
+    //     for (int i = 0; i < art->num_lines && start_y + i < ui->max_rows - 4; i++) 
+    //     {
+    //       mvwprintw(ui->main_area, start_y + i, start_x, "%s", art->lines[i]);
+    //     }
+    //     ascii_art_free(art);
+    //   } 
+    //   else 
+    //   {
+    //     mvwprintw(ui->main_area, 3, 2, "No album art available or conversion failed");
+    //   }
 
-      // Clean up temporary file
-      unlink(temp_file);
-    } 
-    else
-    {
-      mvwprintw(ui->main_area, 3, 2, "Failed to fetch album art");
-    }
+    //   // Clean up temporary file
+    //   unlink(temp_file);
+    // } 
+    // else
+    // {
+    //   mvwprintw(ui->main_area, 3, 2, "Failed to fetch album art");
+    // }
 
     // Display current song info
     if (mpd_send_current_song(conn)) 
