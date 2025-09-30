@@ -4,6 +4,11 @@
 // direct includes
 #include <ncurses.h>
 #include <mpd/client.h>
+#include <mpd/albumart.h>
+#include <mpd/readpicture.h>
+#include <unistd.h>
+#include <errno.h>
+#include "../include/ascii_art.h"
 // indirect includes
 #include <stdlib.h>
 #include <string.h>
@@ -64,6 +69,8 @@ void update_footer(struct mpd_connection *conn, UI* ui);
 void run_tui(struct mpd_connection *conn, UI* ui);
 // get dir up
 char *get_parent_directory(const char *path);
+// fetch curr album art
+int fetch_album_art(struct mpd_connection *conn, const char *temp_file);
 
 
 #endif

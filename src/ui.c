@@ -1,4 +1,8 @@
 #include "../include/ui.h"
+#include <mpd/connection.h>
+#include <mpd/player.h>
+#include <mpd/response.h>
+#include <ncurses.h>
 
 /**
  * @brief Initializes all of necessary UI variables for TUI
@@ -240,22 +244,71 @@ void help_screen(UI *ui)
  */
 void update_main_area(struct mpd_connection *conn, UI* ui) 
 {
-    werase(ui->main_area);
-    box(ui->main_area, 0, 0);
-    if (ui->show_directory_browser) 
+  werase(ui->main_area);
+  box(ui->main_area, 0, 0);
+  if (ui->show_directory_browser) 
+  {
+    update_directory_browser(conn, ui);
+  }
+  else if (ui->show_help)
+  {
+    help_screen(ui);
+  }
+  else 
+  {
+    mvwprintw(ui->main_area, 1, 2, "Orpeus - C-based Music Player");
+    
+    // Fetch and display album art as ASCII
+    const char *temp_file = "/tmp/orpeus_album_art.jpg";
+    if (fetch_album_art(conn, temp_file) == 0) 
     {
-      update_directory_browser(conn, ui);
-    }
-    else if (ui->show_help)
+      // Convert JPEG to ASCII art
+      int ascii_width = ui->max_cols - 4; // Fit within window borders
+      int max_height = ui->max_rows - 7; // Leave space for text and borders
+      AsciiArt *art = jpeg_to_ascii(temp_file, ascii_width, max_height);
+      
+      if (art && art->num_lines > 0) 
+      {
+        // Display ASCII art centered in the main area
+        int start_y = 3; // Start below the title
+        int start_x = (ui->max_cols - art->max_width) / 2; // Center horizontally
+        for (int i = 0; i < art->num_lines && start_y + i < ui->max_rows - 4; i++) 
+        {
+          mvwprintw(ui->main_area, start_y + i, start_x, "%s", art->lines[i]);
+        }
+        ascii_art_free(art);
+      } 
+      else 
+      {
+        mvwprintw(ui->main_area, 3, 2, "No album art available or conversion failed");
+      }
+
+      // Clean up temporary file
+      unlink(temp_file);
+    } 
+    else
     {
-      help_screen(ui);
+      mvwprintw(ui->main_area, 3, 2, "Failed to fetch album art");
     }
-    else 
+
+    // Display current song info
+    if (mpd_send_current_song(conn)) 
     {
-      mvwprintw(ui->main_area, 1, 2, "Orpeus - C-based Music Player");
-      // this is where we put album art
+      struct mpd_song *song = mpd_recv_song(conn);
+      if (song) 
+      {
+        mvwprintw(ui->main_area, ui->max_rows - 5, 2, "Now Playing: %s - %s",
+          mpd_song_get_tag(song, MPD_TAG_ARTIST, 0) ? 
+          mpd_song_get_tag(song, MPD_TAG_ARTIST, 0) : "Unknown Artist",
+          mpd_song_get_tag(song, MPD_TAG_TITLE, 0) ? 
+          mpd_song_get_tag(song, MPD_TAG_TITLE, 0) : "Unknown Title");
+        mpd_song_free(song);
+      }
+      mpd_response_finish(conn);
     }
-    wrefresh(ui->main_area);
+
+  }
+  wrefresh(ui->main_area);
 }
 
 /**
@@ -369,39 +422,39 @@ void run_tui(struct mpd_connection *conn, UI* ui)
         struct mpd_status *status = mpd_recv_status(conn);
         if (status)
         {
-            switch (mpd_status_get_state(status))
-            {
-              // switch play -> pause or fail
-              case MPD_STATE_PLAY:
-                if (mpd_run_pause(conn, true))
-                {
-                  mvwprintw(ui->main_area, ui->item_count + 2, 2, "Paused");
-                }
-                else
-                {
-                  mvwprintw(ui->main_area, ui->item_count + 2, 2, "Failed to pause: %s", 
-                  mpd_connection_get_error_message(conn));
-                }
-                break;
-              case MPD_STATE_PAUSE:
-                // switch stop -> play and pause -> play (same action)
-                case MPD_STATE_STOP:
-                if (mpd_run_play(conn))
-                {
-                  mvwprintw(ui->main_area, ui->item_count + 2, 2, "Playing");
-                }
-                else
-                {
-                  mvwprintw(ui->main_area, ui->item_count + 2, 2, "Failed to play: %s", 
-                  mpd_connection_get_error_message(conn));
-                }
-                break;
-                  // unknown state
-              default:
-                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Unknown playback state");
-                break;
-            }
-            mpd_status_free(status);
+          switch (mpd_status_get_state(status))
+          {
+            // switch play -> pause or fail
+            case MPD_STATE_PLAY:
+              if (mpd_run_pause(conn, true))
+              {
+                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Paused");
+              }
+              else
+              {
+                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Failed to pause: %s", 
+                mpd_connection_get_error_message(conn));
+              }
+              break;
+            case MPD_STATE_PAUSE:
+              // switch stop -> play and pause -> play (same action)
+              case MPD_STATE_STOP:
+              if (mpd_run_play(conn))
+              {
+                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Playing");
+              }
+              else
+              {
+                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Failed to play: %s", 
+                mpd_connection_get_error_message(conn));
+              }
+              break;
+                // unknown state
+            default:
+              mvwprintw(ui->main_area, ui->item_count + 2, 2, "Unknown playback state");
+              break;
+          }
+          mpd_status_free(status);
         }
         else
         {
@@ -411,67 +464,84 @@ void run_tui(struct mpd_connection *conn, UI* ui)
         wrefresh(ui->main_area);            
     }
 
-      // once we enter in the directory browser we can search for music in the user defined dir
-      else if (ui->show_directory_browser) 
+    // skip to next song
+    else if (ch == ']') 
+    {
+      if (!mpd_run_next(conn))
       {
-          // explore directory
-          switch (ch) 
-          {
-              // scroll up and down 
-              case KEY_UP:
-                  if (ui->selected_index > 0) ui->selected_index--;
-                  break;
-              case KEY_DOWN:
-                  if (ui->selected_index < ui->item_count - 1) ui->selected_index++;
-                  break;
-
-              // select a directory or add song to queue
-              case '\n':
-                  if (ui->item_count == 0 || ui->selected_index < 0 || ui->selected_index >= ui->item_count)
-                  {
-                      break; // No valid selection
-                  }
-                  // go down directory
-                  if (ui->item_types[ui->selected_index] == 0) 
-                  {
-                      char *new_dir = ui->item_uris[ui->selected_index];
-                      free(ui->current_directory);
-                      ui->current_directory = strdup(new_dir);
-                      ui->selected_index = 0;
-                  }
-                  // add song to queue
-                  else 
-                  {
-                      if (mpd_run_add(conn, ui->item_uris[ui->selected_index]))
-                      {
-                          mvwprintw(ui->main_area, ui->item_count + 2, 2, "Song added");
-                          if (!mpd_run_play(conn))
-                          {
-                              mvwprintw(ui->main_area, ui->item_count + 3, 2, "Failed to play: %s", 
-                                        mpd_connection_get_error_message(conn));
-                          }
-                      }
-                      else
-                      {
-                          mvwprintw(ui->main_area, ui->item_count + 2, 2, "Failed to add song: %s", 
-                                    mpd_connection_get_error_message(conn));
-                      }
-                      wrefresh(ui->main_area);
-                      mpd_response_finish(conn);    
-                  }
-                  break;
-                  // go up a dir
-              case 'u':
-                  char *parent = get_parent_directory(ui->current_directory);
-                  if (parent) 
-                  {
-                      free(ui->current_directory);
-                      ui->current_directory = parent;
-                      ui->selected_index = 0;
-                  }
-                  break;
-          }
+        mvwprintw(ui->main_area, 10, 10, "Error skipping song: %s", mpd_connection_get_error_message(conn));
       }
+    }
+    else if (ch == '[')
+    {
+      if (!mpd_run_previous(conn))
+      {
+        mvwprintw(ui->main_area, 10, 10, "Error running prev song: %s", mpd_connection_get_error_message(conn));
+      }
+
+    }
+
+    // once we enter in the directory browser we can search for music in the user defined dir
+    else if (ui->show_directory_browser) 
+    {
+      // explore directory
+      switch (ch) 
+      {
+        // scroll up and down 
+        case KEY_UP:
+          if (ui->selected_index > 0) ui->selected_index--;
+          break;
+        case KEY_DOWN:
+          if (ui->selected_index < ui->item_count - 1) ui->selected_index++;
+          break;
+
+        // select a directory or add song to queue
+        case '\n':
+          if (ui->item_count == 0 || ui->selected_index < 0 || ui->selected_index >= ui->item_count)
+          {
+            break; // No valid selection
+          }
+          // go down directory
+          if (ui->item_types[ui->selected_index] == 0) 
+          {
+            char *new_dir = ui->item_uris[ui->selected_index];
+            free(ui->current_directory);
+            ui->current_directory = strdup(new_dir);
+            ui->selected_index = 0;
+          }
+          // add song to queue
+          else 
+          {
+            if (mpd_run_add(conn, ui->item_uris[ui->selected_index]))
+            {
+              mvwprintw(ui->main_area, ui->item_count + 2, 2, "Song added");
+              if (!mpd_run_play(conn))
+              {
+                mvwprintw(ui->main_area, ui->item_count + 3, 2, "Failed to play: %s", 
+                mpd_connection_get_error_message(conn));
+              }
+            }
+            else
+            {
+              mvwprintw(ui->main_area, ui->item_count + 2, 2, "Failed to add song: %s", 
+              mpd_connection_get_error_message(conn));
+            }
+            wrefresh(ui->main_area);
+            mpd_response_finish(conn);    
+          }
+          break;
+            // go up a dir
+        case 'u':
+          char *parent = get_parent_directory(ui->current_directory);
+          if (parent) 
+          {
+            free(ui->current_directory);
+            ui->current_directory = parent;
+            ui->selected_index = 0;
+          }
+          break;
+      }
+    }
     else if (ui->show_directory_selection) 
     {
       if (ch == '\n') 
@@ -548,22 +618,143 @@ void run_tui(struct mpd_connection *conn, UI* ui)
  */
 char *get_parent_directory(const char *path)
 {
-    if (strlen(path) == 0)
+  if (strlen(path) == 0)
+  {
+    return NULL;
+  }
+
+  char *last_slash = strrchr(path, '/');
+
+  if (last_slash == NULL)
+  {
+    return strdup("");
+  }
+
+  size_t len = last_slash - path;
+  char *parent = malloc(len + 1);
+  strncpy(parent, path, len);
+  parent[len] = '\0';
+
+  return parent;
+}
+
+/**
+ * @brief Fetches album art for the current song and saves it to a temporary file
+ * @param conn MPD connection
+ * @param temp_file Path to save the temporary JPEG file
+ * @return 0 on success, -1 on failure
+ */
+int fetch_album_art(struct mpd_connection *conn, const char *temp_file) 
+{
+  // Clear any prior errors
+  mpd_connection_clear_error(conn);
+
+  // Get current song
+  if (!mpd_send_current_song(conn)) 
+  {
+    fprintf(stderr, "Failed to send current song command: %s\n", 
+            mpd_connection_get_error_message(conn));
+    mpd_response_finish(conn);
+    return -1;
+  }
+
+  struct mpd_song *song = mpd_recv_song(conn);
+  if (!song) 
+  {
+    fprintf(stderr, "No current song or error retrieving it: %s\n",
+            mpd_connection_get_error_message(conn));
+    mpd_response_finish(conn);
+    return -1;
+  }
+
+  const char *song_uri = mpd_song_get_uri(song);
+  if (!song_uri) 
+  {
+    fprintf(stderr, "No URI for current song\n");
+    mpd_song_free(song);
+    mpd_response_finish(conn);
+    return -1;
+  }
+
+  char *song_uri_copy = strdup(song_uri);  // Copy to avoid const issues
+  mpd_song_free(song);
+  mpd_response_finish(conn);
+
+  // Send readpicture command for the song
+  if (!mpd_send_readpicture(conn, song_uri_copy, 0)) 
+  {
+    fprintf(stderr, "Failed to send readpicture command: %s\n", 
+            mpd_connection_get_error_message(conn));
+    free(song_uri_copy);
+    mpd_response_finish(conn);
+    return -1;
+  }
+
+  // Open temporary file for writing
+  FILE *fp = fopen(temp_file, "wb");
+  if (!fp) 
+  {
+    fprintf(stderr, "Failed to open temporary file %s: %s\n", temp_file, strerror(errno));
+    free(song_uri_copy);
+    mpd_response_finish(conn);
+    return -1;
+  }
+
+  // Allocate buffer for reading picture data
+  const size_t buffer_size = 8192;  // Default chunk size as per documentation
+  char *buffer = malloc(buffer_size);
+  if (!buffer) 
+  {
+    fprintf(stderr, "Failed to allocate buffer for binary data\n");
+    fclose(fp);
+    unlink(temp_file);
+    free(song_uri_copy);
+    mpd_response_finish(conn);
+    return -1;
+  }
+
+  // Read picture data in chunks
+  size_t total_bytes_written = 0;
+  int bytes_read;
+  while ((bytes_read = mpd_recv_readpicture(conn, buffer, buffer_size)) > 0) 
+  {
+    size_t written = fwrite(buffer, 1, bytes_read, fp);
+    if (written != (size_t)bytes_read) 
     {
-        return NULL;
+      fprintf(stderr, "Failed to write to temp file: %s\n", strerror(errno));
+      free(buffer);
+      fclose(fp);
+      unlink(temp_file);
+      free(song_uri_copy);
+      mpd_response_finish(conn);
+      return -1;
     }
+    total_bytes_written += written;
+  }
 
-    char *last_slash = strrchr(path, '/');
+  free(buffer);
+  fclose(fp);
+  mpd_response_finish(conn);
 
-    if (last_slash == NULL)
-    {
-        return strdup("");
-    }
+  // Check if we read any data
+  if (total_bytes_written == 0) 
+  {
+    fprintf(stderr, "No picture data available for %s\n", song_uri_copy);
+    free(song_uri_copy);
+    unlink(temp_file);
+    return -1;
+  }
 
-    size_t len = last_slash - path;
-    char *parent = malloc(len + 1);
-    strncpy(parent, path, len);
-    parent[len] = '\0';
+  free(song_uri_copy);
 
-    return parent;
+  // Final error check
+  if (bytes_read < 0 || mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) 
+  {
+    fprintf(stderr, "MPD error after fetching picture: %s\n", 
+            mpd_connection_get_error_message(conn));
+    unlink(temp_file);
+    return -1;
+  }
+
+  return 0;
 }
