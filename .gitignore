@@ -1,4 +1,5 @@
 build/*
 .hoppr/
-hoppr_20250721-191324.log
-orpheus.cdx.json
+*.log
+*.json
+.cache
