@@ -52,25 +52,25 @@ typedef struct
 // initialize the ui after setting up ncurses
 void init_ui(const char *starting_directory, UI *ui);
 // clean up tui
-void clean_tui(UI* ui);
+void clean_tui(UI *ui);
 // updates time and current tab
-void update_header(UI* ui);
+void update_header(UI *ui);
 // browse music dir
-void update_directory_browser(struct mpd_connection *conn, UI* ui);
+void update_directory_browser(struct mpd_connection *conn, UI *ui);
 // updates directory screen
-void update_directory_selection(UI* ui);
+void update_directory_selection(UI *ui);
 //help
 void help_screen(UI *ui);
 // update main tab with basic info (expand with album art)
-void update_main_area(struct mpd_connection *conn, UI* ui);
+void update_main_area(struct mpd_connection *conn, UI *ui);
 // update footer with fun animation when music plays
-void update_footer(struct mpd_connection *conn, UI* ui);
+void update_footer(struct mpd_connection *conn, UI *ui);
 // runs whole tui process (Gets called from main)
-void run_tui(struct mpd_connection *conn, UI* ui);
+void run_tui(struct mpd_connection *conn, UI *ui);
 // get dir up
 char *get_parent_directory(const char *path);
 // fetch curr album art
-int fetch_album_art(struct mpd_connection *conn, const char *temp_file);
+int fetch_album_art(struct mpd_connection *conn, const char *temp_file, UI *ui);
 
 
 #endif

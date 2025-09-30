@@ -3,6 +3,7 @@
 #include <mpd/player.h>
 #include <mpd/response.h>
 #include <ncurses.h>
+#include <unistd.h>
 
 /**
  * @brief Initializes all of necessary UI variables for TUI
@@ -261,7 +262,7 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
     
     // Fetch and display album art as ASCII
     // const char *temp_file = "/tmp/orpeus_album_art.jpg";
-    // if (fetch_album_art(conn, temp_file) == 0) 
+    // if (fetch_album_art(conn, temp_file, ui) == 0) 
     // {
     //   // Convert JPEG to ASCII art
     //   int ascii_width = ui->max_cols - 4; // Fit within window borders
@@ -290,13 +291,14 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
     // else
     // {
     //   mvwprintw(ui->main_area, 3, 2, "Failed to fetch album art");
+    //   unlink(temp_file);
     // }
 
     // Display current song info
     struct mpd_song *song = mpd_run_current_song(conn);
     if (song == NULL) 
     {
-      printf("No song currently playing.\n");
+      mvwprintw(ui->main_area, 15, 2, "No Song currently playing");
     } 
     else
     {
@@ -649,89 +651,77 @@ char *get_parent_directory(const char *path)
  * @param temp_file Path to save the temporary JPEG file
  * @return 0 on success, -1 on failure
  */
-int fetch_album_art(struct mpd_connection *conn, const char *temp_file) 
+int fetch_album_art(struct mpd_connection *conn, const char *temp_file, UI *ui) 
 {
-  // Clear any prior errors
-  mpd_connection_clear_error(conn);
+  /* Clear any prior errors */
+  /* mpd_connection_clear_error(conn); */
 
-  // Get current song
+  /* Get current song */
   if (!mpd_send_current_song(conn)) 
   {
-    fprintf(stderr, "Failed to send current song command: %s\n", 
-            mpd_connection_get_error_message(conn));
-    mpd_response_finish(conn);
+    mvwprintw(ui->main_area, 4, 2, "Failed to send current song command");
     return -1;
   }
 
   struct mpd_song *song = mpd_recv_song(conn);
   if (!song) 
   {
-    fprintf(stderr, "No current song or error retrieving it: %s\n",
-            mpd_connection_get_error_message(conn));
-    mpd_response_finish(conn);
     return -1;
   }
 
   const char *song_uri = mpd_song_get_uri(song);
   if (!song_uri) 
   {
-    fprintf(stderr, "No URI for current song\n");
     mpd_song_free(song);
-    mpd_response_finish(conn);
     return -1;
   }
 
-  char *song_uri_copy = strdup(song_uri);  // Copy to avoid const issues
+  /* Duplicate the URI because mpd_recv_readpicture expects a non‑const string */
+  char *song_uri_copy = strdup(song_uri);
   mpd_song_free(song);
-  mpd_response_finish(conn);
+  if (!song_uri_copy) 
+  {
+    return -1;
+  }
 
-  // Send readpicture command for the song
+  /* Send readpicture command for the song */
   if (!mpd_send_readpicture(conn, song_uri_copy, 0)) 
   {
-    fprintf(stderr, "Failed to send readpicture command: %s\n", 
-            mpd_connection_get_error_message(conn));
     free(song_uri_copy);
-    mpd_response_finish(conn);
     return -1;
   }
 
-  // Open temporary file for writing
+  /* Open temporary file for writing */
   FILE *fp = fopen(temp_file, "wb");
   if (!fp) 
   {
-    fprintf(stderr, "Failed to open temporary file %s: %s\n", temp_file, strerror(errno));
     free(song_uri_copy);
-    mpd_response_finish(conn);
     return -1;
   }
 
-  // Allocate buffer for reading picture data
-  const size_t buffer_size = 8192;  // Default chunk size as per documentation
+  /* Allocate buffer for reading picture data */
+  const size_t buffer_size = 8192;   /* Default chunk size as per documentation */
   char *buffer = malloc(buffer_size);
   if (!buffer) 
   {
-    fprintf(stderr, "Failed to allocate buffer for binary data\n");
     fclose(fp);
     unlink(temp_file);
     free(song_uri_copy);
-    mpd_response_finish(conn);
     return -1;
   }
 
-  // Read picture data in chunks
+  /* Read picture data in chunks */
   size_t total_bytes_written = 0;
-  int bytes_read;
+  int bytes_read = 0;
   while ((bytes_read = mpd_recv_readpicture(conn, buffer, buffer_size)) > 0) 
   {
-    size_t written = fwrite(buffer, 1, bytes_read, fp);
+    size_t written = fwrite(buffer, 1, (size_t)bytes_read, fp);
     if (written != (size_t)bytes_read) 
     {
-      fprintf(stderr, "Failed to write to temp file: %s\n", strerror(errno));
       free(buffer);
       fclose(fp);
       unlink(temp_file);
       free(song_uri_copy);
-      mpd_response_finish(conn);
       return -1;
     }
     total_bytes_written += written;
@@ -739,24 +729,18 @@ int fetch_album_art(struct mpd_connection *conn, const char *temp_file)
 
   free(buffer);
   fclose(fp);
-  mpd_response_finish(conn);
+  free(song_uri_copy);
 
-  // Check if we read any data
+  /* If nothing was written, clean up the empty file */
   if (total_bytes_written == 0) 
   {
-    fprintf(stderr, "No picture data available for %s\n", song_uri_copy);
-    free(song_uri_copy);
     unlink(temp_file);
     return -1;
   }
 
-  free(song_uri_copy);
-
-  // Final error check
+  /* Final error check – mpd_recv_readpicture returns <0 on error */
   if (bytes_read < 0 || mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) 
   {
-    fprintf(stderr, "MPD error after fetching picture: %s\n", 
-            mpd_connection_get_error_message(conn));
     unlink(temp_file);
     return -1;
   }
