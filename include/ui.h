@@ -8,7 +8,8 @@
 #include <mpd/readpicture.h>
 #include <unistd.h>
 #include <errno.h>
-#include "../include/ascii_art.h"
+#include <aalib.h>
+#include <jpeglib.h>
 // indirect includes
 #include <stdlib.h>
 #include <string.h>
@@ -69,8 +70,11 @@ void update_footer(struct mpd_connection *conn, UI *ui);
 void run_tui(struct mpd_connection *conn, UI *ui);
 // get dir up
 char *get_parent_directory(const char *path);
-// fetch curr album art
-int fetch_album_art(struct mpd_connection *conn, const char *temp_file, UI *ui);
+// display album art
+//void display_ascii_art(UI *ui, const char *image_path);
 
+// returns the image to ascii string
+// along with width and height
+void image_to_ascii(UI *ui, const char *image_path);
 
 #endif

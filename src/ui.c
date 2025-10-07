@@ -2,8 +2,13 @@
 #include <mpd/connection.h>
 #include <mpd/player.h>
 #include <mpd/response.h>
+#include <mpd/status.h>
 #include <ncurses.h>
 #include <unistd.h>
+
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "../include/stb_image.h"
 
 /**
  * @brief Initializes all of necessary UI variables for TUI
@@ -239,7 +244,7 @@ void help_screen(UI *ui)
 }
 
 /**
- * @brief Main screen that calls other screen sections when user switches
+ * @brief Updates the main area based on the current tab
  * 
  * @param conn 
  * @param ui 
@@ -258,41 +263,10 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
   }
   else 
   {
-    mvwprintw(ui->main_area, 1, 2, "Orpeus - C-based Music Player");
-    
-    // Fetch and display album art as ASCII
-    // const char *temp_file = "/tmp/orpeus_album_art.jpg";
-    // if (fetch_album_art(conn, temp_file, ui) == 0) 
-    // {
-    //   // Convert JPEG to ASCII art
-    //   int ascii_width = ui->max_cols - 4; // Fit within window borders
-    //   int max_height = ui->max_rows - 7; // Leave space for text and borders
-    //   AsciiArt *art = jpeg_to_ascii(temp_file, ascii_width, max_height);
-      
-    //   if (art && art->num_lines > 0) 
-    //   {
-    //     // Display ASCII art centered in the main area
-    //     int start_y = 3; // Start below the title
-    //     int start_x = (ui->max_cols - art->max_width) / 2; // Center horizontally
-    //     for (int i = 0; i < art->num_lines && start_y + i < ui->max_rows - 4; i++) 
-    //     {
-    //       mvwprintw(ui->main_area, start_y + i, start_x, "%s", art->lines[i]);
-    //     }
-    //     ascii_art_free(art);
-    //   } 
-    //   else 
-    //   {
-    //     mvwprintw(ui->main_area, 3, 2, "No album art available or conversion failed");
-    //   }
+    mvwprintw(ui->main_area, 1, 2, "Orpheus - C-based Music Player");
 
-    //   // Clean up temporary file
-    //   unlink(temp_file);
-    // } 
-    // else
-    // {
-    //   mvwprintw(ui->main_area, 3, 2, "Failed to fetch album art");
-    //   unlink(temp_file);
-    // }
+		// Display ASCII art
+    image_to_ascii(ui, "/home/bay/Pictures/wallpapers/kurukuru.gif");
 
     // Display current song info
     struct mpd_song *song = mpd_run_current_song(conn);
@@ -302,18 +276,14 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
     } 
     else
     {
-      // Extract and print song info
       const char *artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
       const char *title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
       const char *album = mpd_song_get_tag(song, MPD_TAG_ALBUM, 0);
-
-      mvwprintw(ui->main_area, 15, 2, "Artist: %s\n", artist ? artist : "Unknown");
-      mvwprintw(ui->main_area, 16, 2, "Title: %s\n", title ? title : "Unknown");
-      mvwprintw(ui->main_area, 17, 2, "Album: %s\n", album ? album : "Unknown");
-
+      mvwprintw(ui->main_area, 15, 2, "Artist: %s", artist ? artist : "Unknown");
+      mvwprintw(ui->main_area, 16, 2, "Title: %s", title ? title : "Unknown");
+      mvwprintw(ui->main_area, 17, 2, "Album: %s", album ? album : "Unknown");
       mpd_song_free(song);
-    } 
-
+    }
   }
   wrefresh(ui->main_area);
 }
@@ -645,105 +615,61 @@ char *get_parent_directory(const char *path)
   return parent;
 }
 
+
 /**
- * @brief Fetches album art for the current song and saves it to a temporary file
- * @param conn MPD connection
- * @param temp_file Path to save the temporary JPEG file
- * @return 0 on success, -1 on failure
+ * @brief Display ASCII art in the ncurses window
+ *
+ * @param win The ncurses window to render the ASCII art
+ * @param image_path Path to the image file
+ * @return none
  */
-int fetch_album_art(struct mpd_connection *conn, const char *temp_file, UI *ui) 
+void image_to_ascii(UI *ui, const char *image_path) 
 {
-  /* Clear any prior errors */
-  /* mpd_connection_clear_error(conn); */
+    // Characters that represent pixel brightness (from darkest to brightest)
+    const char *chars = "`^\",:;Il!i~+_-?][}(1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao#MW&8%B@S";
+    const int charsLen = strlen(chars);
 
-  /* Get current song */
-  if (!mpd_send_current_song(conn)) 
-  {
-    mvwprintw(ui->main_area, 4, 2, "Failed to send current song command");
-    return -1;
-  }
-
-  struct mpd_song *song = mpd_recv_song(conn);
-  if (!song) 
-  {
-    return -1;
-  }
-
-  const char *song_uri = mpd_song_get_uri(song);
-  if (!song_uri) 
-  {
-    mpd_song_free(song);
-    return -1;
-  }
-
-  /* Duplicate the URI because mpd_recv_readpicture expects a non‑const string */
-  char *song_uri_copy = strdup(song_uri);
-  mpd_song_free(song);
-  if (!song_uri_copy) 
-  {
-    return -1;
-  }
-
-  /* Send readpicture command for the song */
-  if (!mpd_send_readpicture(conn, song_uri_copy, 0)) 
-  {
-    free(song_uri_copy);
-    return -1;
-  }
-
-  /* Open temporary file for writing */
-  FILE *fp = fopen(temp_file, "wb");
-  if (!fp) 
-  {
-    free(song_uri_copy);
-    return -1;
-  }
-
-  /* Allocate buffer for reading picture data */
-  const size_t buffer_size = 8192;   /* Default chunk size as per documentation */
-  char *buffer = malloc(buffer_size);
-  if (!buffer) 
-  {
-    fclose(fp);
-    unlink(temp_file);
-    free(song_uri_copy);
-    return -1;
-  }
-
-  /* Read picture data in chunks */
-  size_t total_bytes_written = 0;
-  int bytes_read = 0;
-  while ((bytes_read = mpd_recv_readpicture(conn, buffer, buffer_size)) > 0) 
-  {
-    size_t written = fwrite(buffer, 1, (size_t)bytes_read, fp);
-    if (written != (size_t)bytes_read) 
-    {
-      free(buffer);
-      fclose(fp);
-      unlink(temp_file);
-      free(song_uri_copy);
-      return -1;
+    // Load image using stb_image
+    int width, height, channels;
+    unsigned char *image_data = stbi_load(image_path, &width, &height, &channels, 0);
+    if (!image_data) {
+        mvwprintw(ui->main_area, 2, 2, "Failed to load image: %s", image_path);
+        return;
     }
-    total_bytes_written += written;
-  }
 
-  free(buffer);
-  fclose(fp);
-  free(song_uri_copy);
+    // Get window dimensions
+    int win_height, win_width;
+    getmaxyx(ui->main_area, win_height, win_width);
 
-  /* If nothing was written, clean up the empty file */
-  if (total_bytes_written == 0) 
-  {
-    unlink(temp_file);
-    return -1;
-  }
+    // Scale ASCII art to fit window (reduce resolution)
+    int ascii_width = win_width / 2; // Each character takes ~2 columns
+    int ascii_height = (win_height - 4) > 0 ? (win_height - 4) : 1; // Leave space for song info
 
-  /* Final error check – mpd_recv_readpicture returns <0 on error */
-  if (bytes_read < 0 || mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) 
-  {
-    unlink(temp_file);
-    return -1;
-  }
+    // Clear the area for ASCII art (starting below the title)
+    for (int y = 2; y < ascii_height + 2; y++) {
+        mvwprintw(ui->main_area, y, 2, "%*s", win_width - 4, ""); // Clear line
+    }
 
-  return 0;
+    // Convert image to ASCII and render in ncurses window
+    for (int y = 0; y < ascii_height && y * height / ascii_height < height; y++) {
+        for (int x = 0; x < ascii_width && x * width / ascii_width < width; x++) {
+            int img_x = (x * width) / ascii_width;
+            int img_y = (y * height) / ascii_height;
+            int idx = (img_y * width + img_x) * channels;
+
+            unsigned char r = image_data[idx];
+            unsigned char g = image_data[idx + 1];
+            unsigned char b = image_data[idx + 2];
+            float avg = (r + g + b) / 3.0f;
+            int char_idx = (int)(charsLen * (avg / 255.0f));
+            char_idx = char_idx < 0 ? 0 : (char_idx >= charsLen ? charsLen - 1 : char_idx);
+
+            mvwprintw(ui->main_area, y + 2, x * 2 + 2, "%c", chars[char_idx]); // x * 2 for character spacing
+        }
+    }
+
+    // Free image data
+    stbi_image_free(image_data);
 }
+
+
