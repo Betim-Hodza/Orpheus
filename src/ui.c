@@ -66,6 +66,21 @@ void clean_tui(UI* ui)
   {
     if (ui->item_uris[i]) free(ui->item_uris[i]);
   }
+
+	// free up ascii art 
+	if (ui->ascii_art) 
+	{
+		for (int i = 0; i < ui->ascii_height; i++) 
+		{
+			free(ui->ascii_art[i]);
+		}
+		free(ui->ascii_art);
+	}
+	if (ui->cached_image_path) {
+			free(ui->cached_image_path);
+	}
+
+
   free(ui->item_uris);
   free(ui->item_types);
   delwin(ui->header);
@@ -705,53 +720,108 @@ char *get_parent_directory(const char *path)
  */
 void image_to_ascii(UI *ui, const char *image_path) 
 {
-	// Characters that represent pixel brightness (from darkest to brightest)
 	const char *chars = "`^\",:;Il!i~+_-?][}(1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao#MW&8%B@S";
 	const int charsLen = strlen(chars);
-
-	// Load image using stb_image
-	int width, height, channels;
-	unsigned char *image_data = stbi_load(image_path, &width, &height, &channels, 0);
-	if (!image_data) 
+	
+	// Check if we need to reload the image
+	bool need_reload = false;
+	if (ui->cached_image_path == NULL || strcmp(ui->cached_image_path, image_path) != 0) 
 	{
-		mvwprintw(ui->main_area, 2, 2, "Failed to load image: %s", image_path);
-		return;
+		need_reload = true;
 	}
-
-	// Get window dimensions
+	
+	// Get current window dimensions
 	int win_height, win_width;
 	getmaxyx(ui->main_area, win_height, win_width);
-
-	// Scale ASCII art to fit window (reduce resolution)
-	int ascii_width = win_width / 2; // Each character takes ~2 columns
-	int ascii_height = (win_height - 4) > 0 ? (win_height - 4) : 1; // Leave space for song info
-
-	// Clear the area for ASCII art (starting below the title)
-	for (int y = 2; y < ascii_height + 2; y++) 
+	int ascii_width = win_width / 2;
+	int ascii_height = (win_height - 4) > 0 ? (win_height - 4) : 1;
+	
+	// Check if window size changed
+	if (ui->ascii_art != NULL && (ascii_width != ui->ascii_width || ascii_height != ui->ascii_height)) 
 	{
-		mvwprintw(ui->main_area, y, 2, "%*s", win_width - 4, ""); // Clear line
+		need_reload = true;
 	}
-
-	// Convert image to ASCII and render in ncurses window
-	for (int y = 0; y < ascii_height && y * height / ascii_height < height; y++) 
+	
+	// Load and convert image if needed
+	if (need_reload) 
 	{
-		for (int x = 0; x < ascii_width && x * width / ascii_width < width; x++) 
+		// Free old ASCII art if it exists
+		if (ui->ascii_art) 
 		{
-			int img_x = (x * width) / ascii_width;
-			int img_y = (y * height) / ascii_height;
-			int idx = (img_y * width + img_x) * channels;
-
-			unsigned char r = image_data[idx];
-			unsigned char g = image_data[idx + 1];
-			unsigned char b = image_data[idx + 2];
-			float avg = (r + g + b) / 3.0f;
-			int char_idx = (int)(charsLen * (avg / 255.0f));
-			char_idx = char_idx < 0 ? 0 : (char_idx >= charsLen ? charsLen - 1 : char_idx);
-
-			mvwprintw(ui->main_area, y + 2, x * 2 + 2, "%c", chars[char_idx]); // x * 2 for character spacing
+			for (int i = 0; i < ui->ascii_height; i++) 
+			{
+				free(ui->ascii_art[i]);
+			}
+			free(ui->ascii_art);
+			ui->ascii_art = NULL;
+		}
+		
+		// Load image
+		int width, height, channels;
+		unsigned char *image_data = stbi_load(image_path, &width, &height, &channels, 0);
+		if (!image_data) 
+		{
+			mvwprintw(ui->main_area, 2, 2, "Failed to load image: %s", image_path);
+			return;
+		}
+		
+		// Allocate memory for ASCII art
+		ui->ascii_art = malloc(ascii_height * sizeof(char*));
+		for (int i = 0; i < ascii_height; i++) 
+		{
+			ui->ascii_art[i] = malloc((ascii_width + 1) * sizeof(char));
+		}
+		ui->ascii_width = ascii_width;
+		ui->ascii_height = ascii_height;
+		
+		// Update cached path
+		if (ui->cached_image_path) 
+		{
+			free(ui->cached_image_path);
+		}
+		ui->cached_image_path = strdup(image_path);
+		
+		// Convert image to ASCII and store in array
+		for (int y = 0; y < ascii_height && y * height / ascii_height < height; y++) 
+		{
+			for (int x = 0; x < ascii_width && x * width / ascii_width < width; x++) 
+			{
+				int img_x = (x * width) / ascii_width;
+				int img_y = (y * height) / ascii_height;
+				int idx = (img_y * width + img_x) * channels;
+				
+				unsigned char r = image_data[idx];
+				unsigned char g = image_data[idx + 1];
+				unsigned char b = image_data[idx + 2];
+				
+				float avg = (r + g + b) / 3.0f;
+				int char_idx = (int)(charsLen * (avg / 255.0f));
+				char_idx = char_idx < 0 ? 0 : (char_idx >= charsLen ? charsLen - 1 : char_idx);
+				
+				ui->ascii_art[y][x] = chars[char_idx];
+			}
+			ui->ascii_art[y][ascii_width] = '\0';
+		}
+			
+		stbi_image_free(image_data);
+	}
+	
+	// Always render the cached ASCII art
+	if (ui->ascii_art) 
+	{
+		// Clear the area first
+		for (int y = 2; y < ui->ascii_height + 2; y++) 
+		{
+			mvwprintw(ui->main_area, y, 2, "%*s", win_width - 4, "");
+		}
+		
+		// Render from cache
+		for (int y = 0; y < ui->ascii_height; y++) 
+		{
+			for (int x = 0; x < ui->ascii_width; x++) 
+			{
+				mvwprintw(ui->main_area, y + 2, x * 2 + 2, "%c", ui->ascii_art[y][x]);
+			}
 		}
 	}
-
-	// Free image data
-	stbi_image_free(image_data);
 }
