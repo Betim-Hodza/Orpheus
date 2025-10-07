@@ -265,8 +265,6 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
   {
     mvwprintw(ui->main_area, 1, 2, "Orpheus - C-based Music Player");
 
-		// Display ASCII art
-    image_to_ascii(ui, "/home/bay/Pictures/wallpapers/kurukuru.gif");
 
     // Display current song info
     struct mpd_song *song = mpd_run_current_song(conn);
@@ -282,6 +280,88 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
       mvwprintw(ui->main_area, 15, 2, "Artist: %s", artist ? artist : "Unknown");
       mvwprintw(ui->main_area, 16, 2, "Title: %s", title ? title : "Unknown");
       mvwprintw(ui->main_area, 17, 2, "Album: %s", album ? album : "Unknown");
+
+			if (!mpd_send_status(conn))
+			{
+				mvwprintw(ui->footer, 18, 2, "MPD command error");
+				wrefresh(ui->footer);
+				return;
+			}
+
+			struct mpd_status *status = mpd_recv_status(conn);
+			if (status)
+			{
+				if (mpd_status_get_state(status) == MPD_STATE_PLAY || mpd_status_get_state(status)==MPD_STATE_PAUSE)
+				{
+					// get song uri 
+					const char *song_uri = mpd_song_get_uri(song);
+
+					if (song_uri == NULL)
+					{
+						mvwprintw(ui->main_area, 18, 2, "No song uri");
+					}
+					else 
+					{
+						// for now we just want to rec songs
+						image_to_ascii(ui, "/home/bay/Pictures/wallpapers/gojo_blue.png");
+						// get album art 
+
+						//size_t size;
+						//void *buffer = malloc(2024* 2024);
+						//if (buffer == NULL)
+						//{
+						//	mvwprintw(ui->main_area, 18, 2, "buffer alloc failed");
+						//}
+						//else 
+						//{
+						//	ssize_t read_size = mpd_run_albumart(conn, song_uri, 0, buffer, size);
+						//	
+						//	if (read_size >= 0 && size > 0) 
+						//	{
+						//		// sav album art temp
+						//		FILE *fp = fopen("/tmp/orpheus_cover.jpg", "wb");
+						//		if(fp) 
+						//		{
+						//			fwrite(buffer, 1, size, fp);
+						//			fclose(fp);
+
+						//			// display ascii 
+						//			image_to_ascii(ui, "/tmp/orpheus_cover.jpg");
+						//		}
+						//		else 
+						//		{
+						//			mvwprintw(ui->main_area, 18, 2, "Failed to save album art");
+						//		}
+						//	}
+						//	else 
+						//	{
+						//		mvwprintw(ui->main_area, 18, 2, "No album art available");
+						//	}
+
+						//	free(buffer);
+						//}
+						
+
+						// pull current album art
+						//if ( mpd_send_albumart(conn, song_uri,0))
+						//{
+						//	//mpd_recv_albumart(struct mpd_connection *connection, void *buffer, size_t buffer_size)
+
+						//	// Display ASCII art
+						//	image_to_ascii(ui, "/home/bay/Pictures/wallpapers/kurukuru.gif");
+
+						//}
+					}
+				}
+
+				mpd_status_free(status);
+			}
+			else
+			{
+				mvwprintw(ui->footer, 1, 2, "No status");
+			}
+
+
       mpd_song_free(song);
     }
   }
@@ -625,51 +705,53 @@ char *get_parent_directory(const char *path)
  */
 void image_to_ascii(UI *ui, const char *image_path) 
 {
-    // Characters that represent pixel brightness (from darkest to brightest)
-    const char *chars = "`^\",:;Il!i~+_-?][}(1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao#MW&8%B@S";
-    const int charsLen = strlen(chars);
+	// Characters that represent pixel brightness (from darkest to brightest)
+	const char *chars = "`^\",:;Il!i~+_-?][}(1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao#MW&8%B@S";
+	const int charsLen = strlen(chars);
 
-    // Load image using stb_image
-    int width, height, channels;
-    unsigned char *image_data = stbi_load(image_path, &width, &height, &channels, 0);
-    if (!image_data) {
-        mvwprintw(ui->main_area, 2, 2, "Failed to load image: %s", image_path);
-        return;
-    }
+	// Load image using stb_image
+	int width, height, channels;
+	unsigned char *image_data = stbi_load(image_path, &width, &height, &channels, 0);
+	if (!image_data) 
+	{
+		mvwprintw(ui->main_area, 2, 2, "Failed to load image: %s", image_path);
+		return;
+	}
 
-    // Get window dimensions
-    int win_height, win_width;
-    getmaxyx(ui->main_area, win_height, win_width);
+	// Get window dimensions
+	int win_height, win_width;
+	getmaxyx(ui->main_area, win_height, win_width);
 
-    // Scale ASCII art to fit window (reduce resolution)
-    int ascii_width = win_width / 2; // Each character takes ~2 columns
-    int ascii_height = (win_height - 4) > 0 ? (win_height - 4) : 1; // Leave space for song info
+	// Scale ASCII art to fit window (reduce resolution)
+	int ascii_width = win_width / 2; // Each character takes ~2 columns
+	int ascii_height = (win_height - 4) > 0 ? (win_height - 4) : 1; // Leave space for song info
 
-    // Clear the area for ASCII art (starting below the title)
-    for (int y = 2; y < ascii_height + 2; y++) {
-        mvwprintw(ui->main_area, y, 2, "%*s", win_width - 4, ""); // Clear line
-    }
+	// Clear the area for ASCII art (starting below the title)
+	for (int y = 2; y < ascii_height + 2; y++) 
+	{
+		mvwprintw(ui->main_area, y, 2, "%*s", win_width - 4, ""); // Clear line
+	}
 
-    // Convert image to ASCII and render in ncurses window
-    for (int y = 0; y < ascii_height && y * height / ascii_height < height; y++) {
-        for (int x = 0; x < ascii_width && x * width / ascii_width < width; x++) {
-            int img_x = (x * width) / ascii_width;
-            int img_y = (y * height) / ascii_height;
-            int idx = (img_y * width + img_x) * channels;
+	// Convert image to ASCII and render in ncurses window
+	for (int y = 0; y < ascii_height && y * height / ascii_height < height; y++) 
+	{
+		for (int x = 0; x < ascii_width && x * width / ascii_width < width; x++) 
+		{
+			int img_x = (x * width) / ascii_width;
+			int img_y = (y * height) / ascii_height;
+			int idx = (img_y * width + img_x) * channels;
 
-            unsigned char r = image_data[idx];
-            unsigned char g = image_data[idx + 1];
-            unsigned char b = image_data[idx + 2];
-            float avg = (r + g + b) / 3.0f;
-            int char_idx = (int)(charsLen * (avg / 255.0f));
-            char_idx = char_idx < 0 ? 0 : (char_idx >= charsLen ? charsLen - 1 : char_idx);
+			unsigned char r = image_data[idx];
+			unsigned char g = image_data[idx + 1];
+			unsigned char b = image_data[idx + 2];
+			float avg = (r + g + b) / 3.0f;
+			int char_idx = (int)(charsLen * (avg / 255.0f));
+			char_idx = char_idx < 0 ? 0 : (char_idx >= charsLen ? charsLen - 1 : char_idx);
 
-            mvwprintw(ui->main_area, y + 2, x * 2 + 2, "%c", chars[char_idx]); // x * 2 for character spacing
-        }
-    }
+			mvwprintw(ui->main_area, y + 2, x * 2 + 2, "%c", chars[char_idx]); // x * 2 for character spacing
+		}
+	}
 
-    // Free image data
-    stbi_image_free(image_data);
+	// Free image data
+	stbi_image_free(image_data);
 }
-
-

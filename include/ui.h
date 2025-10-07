@@ -31,23 +31,32 @@ typedef enum
 
 typedef struct 
 {
-    WINDOW *header;
-    WINDOW *main_area;
-    WINDOW *footer;
-    WINDOW *directory_selection;
-    int max_rows;
-    int max_cols;
-    char *current_directory;
-    char **item_uris;
-    int *item_types; // 0 for dir, 1 for song
-    int item_count;
-    int selected_index;
-    bool show_directory_browser;
-    bool show_directory_selection;
-		bool show_help;
-    char input_buffer[MAX_PATH];
-    int input_pos;
-		Tab current_tab;
+	// main windows 
+	WINDOW *header;
+	WINDOW *main_area;
+	WINDOW *footer;
+	WINDOW *directory_selection;
+	// quick maths 
+	int max_rows;
+	int max_cols;
+	// directy semi-globals
+	char *current_directory;
+	char **item_uris;
+	int *item_types; // 0 for dir, 1 for song
+	int item_count;
+	int selected_index;
+	// turn on and off screens 
+	bool show_directory_browser;
+	bool show_directory_selection;
+	bool show_help;
+	char input_buffer[MAX_PATH];
+	int input_pos;
+	Tab current_tab;
+	// ascii album art 
+	char **ascii_art;      // 2D array to store ASCII characters
+	int ascii_width;       // Width of ASCII art
+	int ascii_height;      // Height of ASCII art
+	char *cached_image_path; // Track which image is cached
 } UI;
 
 // initialize the ui after setting up ncurses
