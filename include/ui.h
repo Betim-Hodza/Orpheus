@@ -82,8 +82,8 @@ char *get_parent_directory(const char *path);
 // display album art
 //void display_ascii_art(UI *ui, const char *image_path);
 
-// returns the image to ascii string
-// along with width and height
-void image_to_ascii(UI *ui, const char *image_path);
+// // returns the image to ascii string
+// // along with width and height
+// void image_to_ascii(UI *ui, const char *image_path);
 
 #endif

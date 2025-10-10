@@ -1,5 +1,7 @@
 #include "../include/img_to_ascii.h"
 #include "../include/stb_image.h"
+#include <mpd/albumart.h>
+#include <mpd/connection.h>
 #include <pwd.h>
 #include <sys/types.h>
 
@@ -39,7 +41,7 @@ char* expand_tilde(const char* path) {
 * @param image_path Path to the image file to convert
 * @return none
 */
-void image_to_ascii(UI *ui, const char *image_path) 
+void image_to_ascii(UI *ui, struct mpd_connection *conn, const char *image_path)
 {
 	const char *chars = "`^\",:;Il!i~+_-?][}(1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao#MW&8%B@S";
 	const int charsLen = strlen(chars);
@@ -102,6 +104,8 @@ void image_to_ascii(UI *ui, const char *image_path)
 		if (!image_data) 
 		{
 			mvwprintw(ui->main_area, 2, 2, "Failed to load image: %s", expanded_path);
+			mvwprintw(ui->main_area, 3, 2, "img err: %s", mpd_connection_get_error_message(conn));
+			mpd_connection_clear_error(conn);
 			free(expanded_path);
 			return;
 		}

@@ -314,14 +314,52 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
             return;
           }
 
-          // For now, use a test image to demonstrate ASCII art functionality
-          // The MPD binary data handling is causing connection state issues
-          mvwprintw(ui->main_area, 18, 2, "Album art: Using test image");
-          wrefresh(ui->main_area);
+
+          void *buff;
+          size_t buff_size = 8192;
+          buff = malloc(buff_size);
+          int offset = 0;
+
+          // open temp file and have it write in the for loop
+          FILE *fp = fopen("/temp/orpheus_cover.jpg", "wb");
+
+
+          // it seems like we need to read the image chunks at a time 
+          // not sure but once we read one block we should write it and move onto the next.
+          int read_size = 0;
+          read_size = mpd_run_albumart(conn, song_uri, 0, buff, buff_size);
+
+          while (read_size > 0) 
+          {
+            read_size = mpd_run_albumart(conn, song_uri, 0, buff, buff_size);
+            if (fp)
+            {
+              fwrite(buff, 1, read_size, fp);
+            }
+            else 
+            {
+              free(buff);
+              return;
+            }
+            offset += 8193; // move 1 block forward
+
+          }
+
+          if (fp)
+          {
+            fclose(fp);
+          }
           
           // Display ASCII art from test image
-          image_to_ascii(ui, "~/Developer/orpheus/images/cover.jpg");
+          image_to_ascii(ui, conn, "/temp/orpheus_cover.jpg");
+          free(buff);
         }
+        else
+        {
+          mvwprintw(ui->main_area, 18, 2, "Album art error: %s", 
+                    mpd_connection_get_error_message(conn));
+          mpd_connection_clear_error(conn);
+        } 
 
         mpd_status_free(status);
       }
