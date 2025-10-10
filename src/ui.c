@@ -320,9 +320,26 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
           buff = malloc(buff_size);
           int offset = 0;
 
+          // generate a temp file
+          ui->cached_image_path = "cover_XXXXXX";
+          int fd = mkstemp(ui->cached_image_path); // template now holds the actual path
+          if (fd == -1)
+          {
+            free(buff);
+            mvwprintw(ui->main_area, 18, 2, "fd == -1, err gen temp file");
+            wrefresh(ui->main_area);
+            return;
+          }
           // open temp file and have it write in the for loop
-          FILE *fp = fopen("/temp/orpheus_cover.jpg", "wb");
+          FILE *fp = fdopen(fd, "wb");
 
+          if (fp == NULL)
+          {
+            free(buff);
+            mvwprintw(ui->main_area, 18, 2, "Null fp");
+            wrefresh(ui->main_area);
+            return;
+          }
 
           // it seems like we need to read the image chunks at a time 
           // not sure but once we read one block we should write it and move onto the next.
@@ -332,26 +349,16 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
           while (read_size > 0) 
           {
             read_size = mpd_run_albumart(conn, song_uri, 0, buff, buff_size);
-            if (fp)
-            {
-              fwrite(buff, 1, read_size, fp);
-            }
-            else 
-            {
-              free(buff);
-              return;
-            }
+            fwrite(buff, 1, read_size, fp);
             offset += 8193; // move 1 block forward
 
           }
 
-          if (fp)
-          {
-            fclose(fp);
-          }
           
           // Display ASCII art from test image
           image_to_ascii(ui, conn, "/temp/orpheus_cover.jpg");
+          unlink("/temp/orpheus_cover.jpg"); // Delete when done
+          fclose(fp);
           free(buff);
         }
         else
@@ -371,6 +378,7 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
       mpd_song_free(song);
     }
   }
+  
   wrefresh(ui->main_area);
 }
 
@@ -491,25 +499,25 @@ void run_tui(struct mpd_connection *conn, UI* ui)
             case MPD_STATE_PLAY:
               if (mpd_run_pause(conn, true))
               {
-                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Paused");
+                mvwprintw(ui->main_area, ui->item_count + 3, 2, "Paused");
               }
               else
               {
-                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Failed to pause: %s", 
-                mpd_connection_get_error_message(conn));
+                mvwprintw(ui->main_area, ui->item_count + 3, 2, "Failed to pause: %s", 
+                          mpd_connection_get_error_message(conn));
+                mpd_connection_clear_error(conn);
               }
               break;
             case MPD_STATE_PAUSE:
-              // switch stop -> play and pause -> play (same action)
-              case MPD_STATE_STOP:
+            case MPD_STATE_STOP:
               if (mpd_run_play(conn))
               {
-                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Playing");
+                mvwprintw(ui->main_area, ui->item_count + 3, 2, "Playing");
               }
               else
               {
-                mvwprintw(ui->main_area, ui->item_count + 2, 2, "Failed to play: %s", 
-                mpd_connection_get_error_message(conn));
+                mvwprintw(ui->main_area, ui->item_count + 3, 2, "Failed to play: %s", 
+                          mpd_connection_get_error_message(conn));
               }
               break;
                 // unknown state
@@ -534,12 +542,20 @@ void run_tui(struct mpd_connection *conn, UI* ui)
       {
         mvwprintw(ui->main_area, 10, 10, "Error skipping song: %s", mpd_connection_get_error_message(conn));
       }
+      else 
+      {
+        mpd_run_play(conn);
+      }
     }
     else if (ch == '[')
     {
       if (!mpd_run_previous(conn))
       {
         mvwprintw(ui->main_area, 10, 10, "Error running prev song: %s", mpd_connection_get_error_message(conn));
+      }
+      else 
+      {
+        mpd_run_play(conn);
       }
 
     }
@@ -594,7 +610,7 @@ void run_tui(struct mpd_connection *conn, UI* ui)
           }
           break;
             // go up a dir
-        case 'u':
+        case 27:
           char *parent = get_parent_directory(ui->current_directory);
           if (parent) 
           {
@@ -605,6 +621,7 @@ void run_tui(struct mpd_connection *conn, UI* ui)
           break;
       }
     }
+    // wish i wrote the comments for this cause idont remember char codes
     else if (ui->show_directory_selection) 
     {
       if (ch == '\n') 
@@ -613,7 +630,7 @@ void run_tui(struct mpd_connection *conn, UI* ui)
         ui->current_directory = strdup(ui->input_buffer);
         ui->show_directory_selection = false;
       }
-      else if (ch == 27) 
+      else if (ch == 27) // escape code 
       {   
         // Esc
         strncpy(ui->input_buffer, ui->current_directory, MAX_PATH - 1);
