@@ -1,4 +1,5 @@
 #include "../include/ui.h"
+#include <mpd/albumart.h>
 #include <mpd/connection.h>
 #include <mpd/player.h>
 #include <mpd/response.h>
@@ -286,6 +287,8 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
     if (song == NULL) 
     {
       mvwprintw(ui->main_area, 15, 2, "No Song currently playing");
+			wrefresh(ui->footer);
+      return;
     } 
     else
     {
@@ -314,59 +317,58 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
 					if (song_uri == NULL)
 					{
 						mvwprintw(ui->main_area, 18, 2, "No song uri");
+				    mpd_status_free(status);
+    				wrefresh(ui->footer);
+            return;
 					}
-					else 
-					{
-						// for now we just want to rec songs
-						image_to_ascii(ui, "/home/bay/Pictures/wallpapers/gojo_blue.png");
-						// get album art 
+        
+          // for now we just want to rec songs
+          //image_to_ascii(ui, "/home/bay/Pictures/wallpapers/gojo_blue.png");
+          // get album art 
 
-						//size_t size;
-						//void *buffer = malloc(2024* 2024);
-						//if (buffer == NULL)
-						//{
-						//	mvwprintw(ui->main_area, 18, 2, "buffer alloc failed");
-						//}
-						//else 
-						//{
-						//	ssize_t read_size = mpd_run_albumart(conn, song_uri, 0, buffer, size);
-						//	
-						//	if (read_size >= 0 && size > 0) 
-						//	{
-						//		// sav album art temp
-						//		FILE *fp = fopen("/tmp/orpheus_cover.jpg", "wb");
-						//		if(fp) 
-						//		{
-						//			fwrite(buffer, 1, size, fp);
-						//			fclose(fp);
 
-						//			// display ascii 
-						//			image_to_ascii(ui, "/tmp/orpheus_cover.jpg");
-						//		}
-						//		else 
-						//		{
-						//			mvwprintw(ui->main_area, 18, 2, "Failed to save album art");
-						//		}
-						//	}
-						//	else 
-						//	{
-						//		mvwprintw(ui->main_area, 18, 2, "No album art available");
-						//	}
+          size_t size = 8192;
+          void *buffer = malloc(size);
 
-						//	free(buffer);
-						//}
-						
+          if (buffer == NULL)
+          {
+          	mvwprintw(ui->main_area, 18, 2, "buffer alloc failed");
+          }
+          else 
+          {
+          	ssize_t read_size = mpd_run_albumart(conn, song_uri, 0, buffer, size);
+          	
+          	if (read_size > 0) 
+          	{
+          		// sav album art temp
+          		FILE *fp = fopen("/tmp/orpheus_cover.jpg", "wb");
+          		if(fp) 
+          		{
+          			fwrite(buffer, 1, read_size, fp);
+          			fclose(fp);
 
-						// pull current album art
-						//if ( mpd_send_albumart(conn, song_uri,0))
-						//{
-						//	//mpd_recv_albumart(struct mpd_connection *connection, void *buffer, size_t buffer_size)
+          			// display ascii 
+          			image_to_ascii(ui, "/tmp/orpheus_cover.jpg");
+          		}
+          		else 
+          		{
+          			mvwprintw(ui->main_area, 18, 2, "Failed to save album art");
+          		}
+          	} 
+            else if (read_size == 0)
+            {
+              mvwprintw(ui->main_area, 18, 2, "No album art available");
+            }
+          	else 
+          	{
+          		mvwprintw(ui->main_area, 18, 2, "Album art error: %s", 
+                         mpd_connection_get_error_message(conn));
+              mpd_connection_clear_error(conn);
+          	}
 
-						//	// Display ASCII art
-						//	image_to_ascii(ui, "/home/bay/Pictures/wallpapers/kurukuru.gif");
-
-						//}
-					}
+          	free(buffer);
+          }
+        
 				}
 
 				mpd_status_free(status);
