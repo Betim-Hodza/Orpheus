@@ -320,6 +320,7 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
           size_t buff_size = 8192;
           buff = malloc(buff_size);
           int offset = 0;
+					int read_size;
 
           FILE *fp = fopen("/tmp/orpheus_cover.jpg", "wb"); 
           if (fp == NULL)
@@ -332,24 +333,39 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
 
           // it seems like we need to read the image chunks at a time 
           // not sure but once we read one block we should write it and move onto the next.
-          int read_size = 0;
-          read_size = mpd_run_albumart(conn, song_uri, 0, buff, buff_size);
-
+					// we can read album art !
 					// this is somehow breaking everything lmao idk what im doing
-          //while (read_size > 0) 
-          //{
-          //  read_size = mpd_run_albumart(conn, song_uri, 0, buff, buff_size);
-          //  fwrite(buff, 1, read_size, fp);
-          //  offset += 8193; // move 1 block forward
+					do
+					{
+						read_size = mpd_run_albumart(conn, song_uri, offset, buff, buff_size);
+						if (read_size == -1)
+						{
+							// free heap stuff 
+							unlink("/tmp/orpheus_cover.jpg"); // Delete when done
+							fclose(fp);
+							free(buff);
+							mpd_status_free(status);
+							
+							// errr msg 
+							mvwprintw(ui->main_area, 18, 2, "Cannot read album art: %s", mpd_connection_get_error_message(conn));
+							mpd_connection_clear_error(conn); // clear error so we dont have soft crash
 
-          //}
+							// yeet outta here 
+							wrefresh(ui->main_area);
+							return;
+						}
+						fwrite(buff, 1, read_size, fp);
+						offset += read_size; // move by amt returned 
+						
+					}
+					while (read_size > 0);
 
-          
-          // Display ASCII art from test image
-          image_to_ascii(ui, conn, "/tmp/orpheus_cover.jpg");
-          unlink("/temp/orpheus_cover.jpg"); // Delete when done
-          fclose(fp);
-          free(buff);
+					// Display ASCII art from test image
+					image_to_ascii(ui, conn, "/tmp/orpheus_cover.jpg");
+					unlink("/tmp/orpheus_cover.jpg"); // Delete when done
+					fclose(fp);
+					free(buff);
+
         }
         else
         {
