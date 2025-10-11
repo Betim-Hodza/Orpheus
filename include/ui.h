@@ -36,6 +36,7 @@ typedef struct
 	WINDOW *main_area;
 	WINDOW *footer;
 	WINDOW *directory_selection;
+	WINDOW *queue_area;
 	// quick maths 
 	int max_rows;
 	int max_cols;
@@ -49,6 +50,7 @@ typedef struct
 	bool show_directory_browser;
 	bool show_directory_selection;
 	bool show_help;
+	bool show_queue;
 	char input_buffer[MAX_PATH];
 	int input_pos;
 	Tab current_tab;
@@ -71,6 +73,8 @@ void update_directory_browser(struct mpd_connection *conn, UI *ui);
 void update_directory_selection(UI *ui);
 //help
 void help_screen(UI *ui);
+// show current songs in queue 
+void queue_screen(struct mpd_connection *conn, UI *ui);
 // update main tab with basic info (expand with album art)
 void update_main_area(struct mpd_connection *conn, UI *ui);
 // update footer with fun animation when music plays

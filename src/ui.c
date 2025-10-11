@@ -2,6 +2,7 @@
 #include "../include/img_to_ascii.h"
 #include <mpd/albumart.h>
 #include <mpd/connection.h>
+#include <mpd/error.h>
 #include <mpd/player.h>
 #include <mpd/recv.h>
 #include <mpd/response.h>
@@ -23,6 +24,7 @@ void init_ui(const char *starting_directory, UI *ui)
   ui->header = newwin(3, ui->max_cols, 0, 0);
   ui->main_area = newwin(ui->max_rows - 5, ui->max_cols, 3, 0);
   ui->directory_selection = newwin(2, ui->max_cols, ui->max_rows - 4, 0);
+	ui->queue_area = newwin(ui->max_rows - 5, ui->max_cols, 3, 0);
   ui->footer = newwin(2, ui->max_cols, ui->max_rows - 2, 0);
 
   // directory setup
@@ -87,6 +89,7 @@ void clean_tui(UI* ui)
   delwin(ui->header);
   delwin(ui->main_area);
   delwin(ui->directory_selection);
+	delwin(ui->queue_area);
   delwin(ui->footer);
   endwin();
 }
@@ -245,18 +248,29 @@ void update_directory_selection(UI* ui)
  */
 void help_screen(UI *ui)
 {
-    werase(ui->main_area);
-    box(ui->main_area, 0, 0);
+	werase(ui->main_area);
+	box(ui->main_area, 0, 0);
 
-    mvwprintw(ui->main_area, 1, 2, "Main Help:");
-    mvwprintw(ui->main_area, 2, 2, "P              | Play/Pause");
-    mvwprintw(ui->main_area, 3, 2, "'[' ']'        | Prev song, Next song");
-    mvwprintw(ui->main_area, 4, 2, "<LEFT> <RIGHT> | Move to tabs left or right (cycles)");
-    mvwprintw(ui->main_area, 6, 2, "Directory Help:");
-    mvwprintw(ui->main_area, 7, 2, "<UP> <DOWN>    | Scrolls up and down a list");
-    mvwprintw(ui->main_area, 8, 2, "U              | Goes up a directory]");
-    mvwprintw(ui->main_area, 9, 2, "<ENTER>        | Goes down a directory and adds song to que");
-    wrefresh(ui->main_area);
+	mvwprintw(ui->main_area, 1, 2, "Main Help:");
+	mvwprintw(ui->main_area, 2, 2, "P              | Play/Pause");
+	mvwprintw(ui->main_area, 3, 2, "'[' ']'        | Prev song, Next song");
+	mvwprintw(ui->main_area, 4, 2, "<LEFT> <RIGHT> | Move to tabs left or right (cycles)");
+	mvwprintw(ui->main_area, 5, 2, "<BACKSPACE>    | Clear song queue");
+
+
+	mvwprintw(ui->main_area, 7, 2, "Directory Help:");
+	mvwprintw(ui->main_area, 8, 2, "<UP> <DOWN>    | Scrolls up and down a list");
+	mvwprintw(ui->main_area, 9, 2, "<ESC>          | Goes up a directory]");
+	mvwprintw(ui->main_area, 10, 2, "<ENTER>        | Goes down a directory and adds song to que");
+	wrefresh(ui->main_area);
+}
+
+void queue_screen(struct mpd_connection *conn, UI *ui)
+{
+	werase(ui->main_area);
+	box(ui->main_area, 0, 0);
+
+	mvwprintw(ui->main_area, 1, 2, "Queue / Playlist:");
 }
 
 /**
@@ -273,6 +287,10 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
   {
     update_directory_browser(conn, ui);
   }
+	else if (ui->show_queue)
+	{
+		queue_screen(conn, ui);	
+	}
   else if (ui->show_help)
   {
     help_screen(ui);
@@ -373,9 +391,13 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
         }
         else
         {
-          mvwprintw(ui->main_area, 18, 2, "Album art error: %s", 
-                    mpd_connection_get_error_message(conn));
-          mpd_connection_clear_error(conn);
+					// catch when we dont have any music or art to display 
+					if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS)
+					{
+						mvwprintw(ui->main_area, 18, 2, "Album art error: %s", 
+											mpd_connection_get_error_message(conn));
+						mpd_connection_clear_error(conn);
+					}
         } 
 
         mpd_status_free(status);
@@ -551,10 +573,7 @@ void run_tui(struct mpd_connection *conn, UI* ui)
       if (!mpd_run_next(conn))
       {
         mvwprintw(ui->main_area, 10, 10, "Error skipping song: %s", mpd_connection_get_error_message(conn));
-      }
-      else 
-      {
-        mpd_run_play(conn);
+				mpd_connection_clear_error(conn);
       }
     }
     else if (ch == '[')
@@ -562,13 +581,19 @@ void run_tui(struct mpd_connection *conn, UI* ui)
       if (!mpd_run_previous(conn))
       {
         mvwprintw(ui->main_area, 10, 10, "Error running prev song: %s", mpd_connection_get_error_message(conn));
-      }
-      else 
-      {
-        mpd_run_play(conn);
+				mpd_connection_clear_error(conn);
       }
 
     }
+		else if (ch == KEY_BACKSPACE)
+		{
+			// clear the mpd queue 
+			if (!mpd_run_clear(conn))
+			{
+        mvwprintw(ui->main_area, 10, 10, "Error clearing song: %s", mpd_connection_get_error_message(conn));
+				mpd_connection_clear_error(conn);
+			}
+		}
 
     // once we enter in the directory browser we can search for music in the user defined dir
     else if (ui->show_directory_browser) 
@@ -668,26 +693,26 @@ void run_tui(struct mpd_connection *conn, UI* ui)
       // home 
       case 0:
         ui->show_directory_browser = false;
-        // ui->show_playlists = false
+        ui->show_queue = false;
         ui->show_help = false;
         break;
       // directory
       case 1:
         ui->show_directory_browser = true;
         ui->show_help = false;
-        // ui->show_playlists = false 
+        ui->show_queue = false;
         break;
       // playlist
       case 2:
         ui->show_directory_browser = false;
-        // ui->show_playlists = true
+        ui->show_queue = true;
         ui->show_help = false;
         break;
       // help
       case 3:
         ui->show_directory_browser = false;
         ui->show_help = true;
-        // ui->show_playlists = false
+        ui->show_queue = false;
         break;
       default:
         break;
