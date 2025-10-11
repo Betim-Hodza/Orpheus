@@ -284,8 +284,9 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
     struct mpd_song *song = mpd_run_current_song(conn);
     if (song == NULL) 
     {
-      mvwprintw(ui->main_area, 15, 2, "No Song currently playing");
+      mvwprintw(ui->main_area, 15, 2, "mpd song err: %s", mpd_connection_get_error_message(conn));
 			wrefresh(ui->footer);
+			mpd_connection_clear_error(conn);
       return;
     } 
     else
@@ -293,9 +294,9 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
       const char *artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
       const char *title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
       const char *album = mpd_song_get_tag(song, MPD_TAG_ALBUM, 0);
-      mvwprintw(ui->main_area, 15, 2, "Artist: %s", artist ? artist : "Unknown");
-      mvwprintw(ui->main_area, 16, 2, "Title: %s", title ? title : "Unknown");
-      mvwprintw(ui->main_area, 17, 2, "Album: %s", album ? album : "Unknown");
+      mvwprintw(ui->main_area, ui->max_rows - 10 , 2, "Artist: %s", artist ? artist : "Unknown");
+      mvwprintw(ui->main_area, ui->max_rows - 9, 2, "Title: %s", title ? title : "Unknown");
+      mvwprintw(ui->main_area, ui->max_rows - 8, 2, "Album: %s", album ? album : "Unknown");
 
       struct mpd_status *status = mpd_run_status(conn);
       if (status)
@@ -320,19 +321,7 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
           buff = malloc(buff_size);
           int offset = 0;
 
-          // generate a temp file
-          ui->cached_image_path = "cover_XXXXXX";
-          int fd = mkstemp(ui->cached_image_path); // template now holds the actual path
-          if (fd == -1)
-          {
-            free(buff);
-            mvwprintw(ui->main_area, 18, 2, "fd == -1, err gen temp file");
-            wrefresh(ui->main_area);
-            return;
-          }
-          // open temp file and have it write in the for loop
-          FILE *fp = fdopen(fd, "wb");
-
+          FILE *fp = fopen("/tmp/orpheus_cover.jpg", "wb"); 
           if (fp == NULL)
           {
             free(buff);
@@ -346,17 +335,18 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
           int read_size = 0;
           read_size = mpd_run_albumart(conn, song_uri, 0, buff, buff_size);
 
-          while (read_size > 0) 
-          {
-            read_size = mpd_run_albumart(conn, song_uri, 0, buff, buff_size);
-            fwrite(buff, 1, read_size, fp);
-            offset += 8193; // move 1 block forward
+					// this is somehow breaking everything lmao idk what im doing
+          //while (read_size > 0) 
+          //{
+          //  read_size = mpd_run_albumart(conn, song_uri, 0, buff, buff_size);
+          //  fwrite(buff, 1, read_size, fp);
+          //  offset += 8193; // move 1 block forward
 
-          }
+          //}
 
           
           // Display ASCII art from test image
-          image_to_ascii(ui, conn, "/temp/orpheus_cover.jpg");
+          image_to_ascii(ui, conn, "/tmp/orpheus_cover.jpg");
           unlink("/temp/orpheus_cover.jpg"); // Delete when done
           fclose(fp);
           free(buff);

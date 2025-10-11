@@ -104,7 +104,7 @@ void image_to_ascii(UI *ui, struct mpd_connection *conn, const char *image_path)
 		if (!image_data) 
 		{
 			mvwprintw(ui->main_area, 2, 2, "Failed to load image: %s", expanded_path);
-			mvwprintw(ui->main_area, 3, 2, "img err: %s", mpd_connection_get_error_message(conn));
+			//mvwprintw(ui->main_area, 3, 2, "img err: %s", mpd_connection_get_error_message(conn));
 			mpd_connection_clear_error(conn);
 			free(expanded_path);
 			return;
