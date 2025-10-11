@@ -80,6 +80,8 @@ void clean_tui(UI* ui)
 	}
 
 
+	// clean up album art path
+	unlink("/tmp/orpheus_cover.jpg"); // Delete when done
   free(ui->item_uris);
   free(ui->item_types);
   delwin(ui->header);
@@ -284,9 +286,13 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
     struct mpd_song *song = mpd_run_current_song(conn);
     if (song == NULL) 
     {
-      mvwprintw(ui->main_area, 15, 2, "mpd song err: %s", mpd_connection_get_error_message(conn));
-			wrefresh(ui->footer);
-			mpd_connection_clear_error(conn);
+			if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS )
+			{
+				mvwprintw(ui->main_area, 15, 2, "mpd song err: %s", mpd_connection_get_error_message(conn));
+				wrefresh(ui->footer);
+				mpd_connection_clear_error(conn);
+
+			}
       return;
     } 
     else
@@ -341,7 +347,6 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
 						if (read_size == -1)
 						{
 							// free heap stuff 
-							unlink("/tmp/orpheus_cover.jpg"); // Delete when done
 							fclose(fp);
 							free(buff);
 							mpd_status_free(status);
@@ -362,7 +367,6 @@ void update_main_area(struct mpd_connection *conn, UI* ui)
 
 					// Display ASCII art from test image
 					image_to_ascii(ui, conn, "/tmp/orpheus_cover.jpg");
-					unlink("/tmp/orpheus_cover.jpg"); // Delete when done
 					fclose(fp);
 					free(buff);
 
