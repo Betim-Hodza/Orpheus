@@ -2,6 +2,7 @@
 #include "../include/img_to_ascii.h"
 #include <mpd/albumart.h>
 #include <mpd/connection.h>
+#include <mpd/entity.h>
 #include <mpd/error.h>
 #include <mpd/player.h>
 #include <mpd/recv.h>
@@ -267,10 +268,54 @@ void help_screen(UI *ui)
 
 void queue_screen(struct mpd_connection *conn, UI *ui)
 {
+	int i = 3; // loop counter for funs (start at 3 since error is on line 2, and title is on line 1)
 	werase(ui->main_area);
 	box(ui->main_area, 0, 0);
 
 	mvwprintw(ui->main_area, 1, 2, "Queue / Playlist:");
+
+	// queue processing
+	// we need to ask mpd for stuff coming up in our playlist 
+	
+	// only grab as many songs as we can display
+	if (!mpd_send_list_queue_range_meta(conn, 0, ui->max_rows - 3))
+	{
+		// on error we print message 
+		if(mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS)
+		{
+			fprintf(stderr, "Error sending list queue command: %s\n",
+                mpd_connection_get_error_message(conn));
+			mpd_connection_clear_error(conn);
+		}
+		else 
+			mvwprintw(ui->main_area, 2, 2, "Queue empty");
+		wrefresh(ui->main_area);
+    return;	
+	}
+
+	// get song by song
+	struct mpd_entity *entity;
+
+	while ((entity = mpd_recv_entity(conn)) != NULL)
+	{
+		// find a song 
+		if (mpd_entity_get_type(entity) == MPD_ENTITY_TYPE_SONG)
+		{
+			struct mpd_song *song = mpd_entity_get_song(entity);
+			// song metadata
+			unsigned pos = mpd_song_get_pos(song);
+			const char *title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
+			const char *artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
+
+			mvwprintw(ui->main_area, i, 2, "%u : %s -- %s", pos, title, artist);
+			i++;
+		}
+
+		mpd_entity_free(entity);
+	}
+
+
+	wrefresh(ui->main_area);
 }
 
 /**
