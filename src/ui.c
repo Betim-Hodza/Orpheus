@@ -275,7 +275,6 @@ void queue_screen(struct mpd_connection *conn, UI *ui)
 	mvwprintw(ui->main_area, 1, 2, "Queue / Playlist:");
 
 	// queue processing
-	// we need to ask mpd for stuff coming up in our playlist 
 	
 	// only grab as many songs as we can display
 	if (!mpd_send_list_queue_range_meta(conn, 0, ui->max_rows - 3))
@@ -295,7 +294,6 @@ void queue_screen(struct mpd_connection *conn, UI *ui)
 
 	// get song by song
 	struct mpd_entity *entity;
-
 	while ((entity = mpd_recv_entity(conn)) != NULL)
 	{
 		// find a song 
@@ -313,6 +311,11 @@ void queue_screen(struct mpd_connection *conn, UI *ui)
 
 		mpd_entity_free(entity);
 	}
+
+
+	// selection of queue items 
+	// essentially we loop through some part of this 
+
 
 
 	wrefresh(ui->main_area);
