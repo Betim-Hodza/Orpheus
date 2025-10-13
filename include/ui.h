@@ -59,6 +59,9 @@ typedef struct
 	int ascii_width;       // Width of ASCII art
 	int ascii_height;      // Height of ASCII art
 	char *cached_image_path; // Track which image is cached
+	// queue scrolling
+	unsigned int total_qsongs;
+	unsigned int queue_ctr;
 } UI;
 
 // initialize the ui after setting up ncurses

@@ -275,9 +275,26 @@ void queue_screen(struct mpd_connection *conn, UI *ui)
 	mvwprintw(ui->main_area, 1, 2, "Queue / Playlist:");
 
 	// queue processing
+	// ideally this should loop so we need a queue count
 	
-	// only grab as many songs as we can display
-	if (!mpd_send_list_queue_range_meta(conn, 0, ui->max_rows - 3))
+  struct mpd_status *status = mpd_run_status(conn);
+	ui->total_qsongs = mpd_status_get_queue_length(status);
+	unsigned start;
+	unsigned end;
+	if (ui->total_qsongs == 0)
+	{
+		start = 0;
+		end = 0;
+	}
+	else 
+	{
+		start = ui->queue_ctr % ui->total_qsongs;
+		end = (start + (ui->max_rows - 3)) % ui->total_qsongs;
+	}
+
+	
+	// only grab as many songs as we can display 
+	if (!mpd_send_list_queue_range_meta(conn, start, end ))
 	{
 		// on error we print message 
 		if(mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS)
@@ -299,7 +316,7 @@ void queue_screen(struct mpd_connection *conn, UI *ui)
 		// find a song 
 		if (mpd_entity_get_type(entity) == MPD_ENTITY_TYPE_SONG)
 		{
-			struct mpd_song *song = mpd_entity_get_song(entity);
+			struct mpd_song *song = (struct mpd_song*)mpd_entity_get_song(entity);
 			// song metadata
 			unsigned pos = mpd_song_get_pos(song);
 			const char *title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
@@ -734,6 +751,17 @@ void run_tui(struct mpd_connection *conn, UI* ui)
         ui->input_buffer[ui->input_pos] = '\0';
       }
     }
+		else if (ui->show_queue)
+		{
+			if (ch == KEY_UP)
+			{
+				ui->queue_ctr = (ui->queue_ctr + 1 + ui->total_qsongs) % ui->total_qsongs;
+			}
+			else if (ch == KEY_DOWN)
+			{
+				ui->queue_ctr = (ui->queue_ctr + 1) % ui->total_qsongs;
+			}
+		}
 
     // update current window
     switch (current_win) 
