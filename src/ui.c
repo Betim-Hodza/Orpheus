@@ -15,12 +15,12 @@
 /**
  * @brief Initializes all of necessary UI variables for TUI
  *
- * @param starting_directory
+ * @param music_root - absolute path to MPD music directory
  * @param ui
  */
-void init_ui(const char *starting_directory, UI *ui) {
-  log_debug("Initializing UI with starting directory: '%s'",
-            starting_directory ? starting_directory : "(null)");
+void init_ui(const char *music_root, UI *ui) {
+  log_debug("Initializing UI with music root: '%s'",
+            music_root ? music_root : "(null)");
 
   getmaxyx(stdscr, ui->max_rows, ui->max_cols);
   log_debug("Terminal dimensions: %d rows x %d cols", ui->max_rows,
@@ -40,8 +40,10 @@ void init_ui(const char *starting_directory, UI *ui) {
     exit(1);
   }
 
-  // directory setup
-  ui->current_directory = strdup(starting_directory ? starting_directory : "");
+  // directory setup - store music root and start at root directory (empty
+  // string for MPD)
+  ui->music_root = strdup(music_root ? music_root : "");
+  ui->current_directory = strdup(""); // empty string = MPD root directory
   ui->item_uris = malloc(MAX_ITEMS * sizeof(char *));
   ui->item_types = malloc(MAX_ITEMS * sizeof(int));
 
@@ -49,6 +51,12 @@ void init_ui(const char *starting_directory, UI *ui) {
     log_fatal("Memory allocation failed for item_uris / item_types");
     endwin();
     exit(1);
+  }
+
+  // Initialize arrays to NULL/0
+  for (int i = 0; i < MAX_ITEMS; i++) {
+    ui->item_uris[i] = NULL;
+    ui->item_types[i] = 0;
   }
 
   ui->item_count = 0;
@@ -60,11 +68,10 @@ void init_ui(const char *starting_directory, UI *ui) {
   ui->show_directory_selection = false;
   ui->current_tab = home;
 
-  // current path and input buffer
-  strncpy(ui->input_buffer, starting_directory ? starting_directory : "",
-          MAX_PATH - 1);
+  // current path and input buffer - start at root
+  strncpy(ui->input_buffer, "", MAX_PATH - 1);
   ui->input_buffer[MAX_PATH - 1] = '\0';
-  ui->input_pos = strlen(ui->input_buffer);
+  ui->input_pos = 0;
 
   log_debug("UI initialized successfully");
 }
@@ -78,6 +85,7 @@ void clean_tui(UI *ui) {
   log_debug("Cleaning up UI resources");
 
   free(ui->current_directory);
+  free(ui->music_root);
   for (int i = 0; i < ui->item_count; i++) {
     if (ui->item_uris[i])
       free(ui->item_uris[i]);
@@ -137,6 +145,54 @@ void update_header(UI *ui) {
 }
 
 /**
+ * @brief Convert absolute path to MPD-relative path
+ * MPD expects paths relative to its music_directory root
+ *
+ * @param absolute_path - full filesystem path
+ * @param music_root - MPD's music_directory base path
+ * @return relative path string (caller must free), or NULL for root
+ */
+static const char *to_mpd_relative(const char *absolute_path,
+                                   const char *music_root) {
+  // Empty string or NULL means root directory
+  if (!absolute_path || !absolute_path[0]) {
+    return NULL; // MPD uses NULL for root
+  }
+
+  // If it's already relative (doesn't start with /), return as-is
+  if (absolute_path[0] != '/') {
+    return absolute_path;
+  }
+
+  // Safety check for music_root
+  if (!music_root || !music_root[0]) {
+    return absolute_path; // Can't convert without music_root
+  }
+
+  // Check if path starts with music_root
+  size_t root_len = strlen(music_root);
+  if (strncmp(absolute_path, music_root, root_len) == 0) {
+    // Path is under music_root
+    const char *rel = absolute_path + root_len;
+
+    // Skip leading slash if present
+    while (*rel == '/') {
+      rel++;
+    }
+
+    // Return NULL for root (empty after stripping music_root)
+    if (!*rel) {
+      return NULL;
+    }
+
+    return rel;
+  }
+
+  // Path is not under music_root, return as-is (MPD will handle error)
+  return absolute_path;
+}
+
+/**
  * @brief for each item we'll update the displayed directory from mpd
  *
  * @param conn
@@ -145,20 +201,20 @@ void update_header(UI *ui) {
 void update_directory_browser(struct mpd_connection *conn, UI *ui) {
   log_debug("Updating directory browser for path: '%s'", ui->current_directory);
 
-  // reset everything
-  for (int i = 0; i < MAX_ITEMS; i++) {
-    ui->item_uris[i] = NULL;
-    ui->item_types[i] = 0;
-  }
-
+  // Free existing items
   for (int i = 0; i < ui->item_count; i++) {
-    if (ui->item_uris[i])
+    if (ui->item_uris[i]) {
       free(ui->item_uris[i]);
+      ui->item_uris[i] = NULL;
+    }
   }
   ui->item_count = 0;
 
-  if (!mpd_send_list_meta(conn, ui->current_directory[0] ? ui->current_directory
-                                                         : NULL)) {
+  // Convert current_directory to MPD-relative path
+  const char *mpd_path = to_mpd_relative(ui->current_directory, ui->music_root);
+  log_debug("MPD path for listing: '%s'", mpd_path ? mpd_path : "(root)");
+
+  if (!mpd_send_list_meta(conn, mpd_path)) {
     log_error("Failed to send list_meta MPD command for directory '%s': %s",
               ui->current_directory, mpd_connection_get_error_message(conn));
     mvwprintw(ui->main_area, 2, 2, "Error sending MPD command");
@@ -197,7 +253,13 @@ void update_directory_browser(struct mpd_connection *conn, UI *ui) {
 
   werase(ui->main_area);
   box(ui->main_area, 0, 0);
-  mvwprintw(ui->main_area, 1, 2, "Directory: %s", ui->current_directory);
+
+  // Display user-friendly path (show root as "/" or music_root basename)
+  const char *display_path = ui->current_directory;
+  if (!display_path || !display_path[0]) {
+    display_path = "/"; // Show root as "/"
+  }
+  mvwprintw(ui->main_area, 1, 2, "Directory: %s", display_path);
 
   if (ui->item_count == 0) {
     mvwprintw(ui->main_area, 2, 2, "No items found");
@@ -205,10 +267,15 @@ void update_directory_browser(struct mpd_connection *conn, UI *ui) {
     for (int j = 0; j < ui->item_count; j++) {
       if (j == ui->selected_index)
         wattron(ui->main_area, A_REVERSE);
+
+      // Display just the basename for cleaner listing
+      const char *display_name = ui->item_uris[j];
+      display_name = display_name ? display_name + 1 : ui->item_uris[j];
+
       if (ui->item_types[j] == 0)
-        mvwprintw(ui->main_area, j + 2, 2, "%s/", ui->item_uris[j]);
+        mvwprintw(ui->main_area, j + 2, 2, "%s/", display_name);
       else
-        mvwprintw(ui->main_area, j + 2, 2, "%s", ui->item_uris[j]);
+        mvwprintw(ui->main_area, j + 2, 2, "%s", display_name);
       if (j == ui->selected_index)
         wattroff(ui->main_area, A_REVERSE);
     }
@@ -534,8 +601,15 @@ void run_tui(struct mpd_connection *conn, UI *ui) {
                       mpd_connection_get_error_message(conn));
             mpd_connection_clear_error(conn);
           }
-        } else {
+        } else if (state == MPD_STATE_PAUSE) {
           log_info("Starting playback");
+          if (!mpd_run_pause(conn, false)) {
+            log_error("Failed to play: %s",
+                      mpd_connection_get_error_message(conn));
+            mpd_connection_clear_error(conn);
+          }
+        } else if (state == MPD_STATE_STOP) {
+          log_info("Starting playback from stop");
           if (!mpd_run_play(conn)) {
             log_error("Failed to play: %s",
                       mpd_connection_get_error_message(conn));
@@ -705,7 +779,7 @@ char *get_parent_directory(const char *path) {
     return NULL;
   }
 
-  char *last_slash = strrchr(path, '/');
+  const char *last_slash = strrchr(path, '/');
   if (last_slash == NULL) {
     return strdup("");
   }
