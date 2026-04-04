@@ -42,6 +42,7 @@ typedef struct
 	int max_cols;
 	// directy semi-globals
 	char *current_directory;
+	char *music_root;  // absolute path to MPD music directory root
 	char **item_uris;
 	int *item_types; // 0 for dir, 1 for song
 	int item_count;
@@ -65,7 +66,7 @@ typedef struct
 } UI;
 
 // initialize the ui after setting up ncurses
-void init_ui(const char *starting_directory, UI *ui);
+void init_ui(const char *music_root, UI *ui);
 // clean up tui
 void clean_tui(UI *ui);
 // updates time and current tab

@@ -1,5 +1,6 @@
 #include "../include/ui.h"
 #include "../include/img_to_ascii.h"
+#include "../include/log.h"
 #include <mpd/albumart.h>
 #include <mpd/connection.h>
 #include <mpd/entity.h>
@@ -18,7 +19,12 @@
  * @param ui
  */
 void init_ui(const char *starting_directory, UI *ui) {
+  log_debug("Initializing UI with starting directory: '%s'",
+            starting_directory ? starting_directory : "(null)");
+
   getmaxyx(stdscr, ui->max_rows, ui->max_cols);
+  log_debug("Terminal dimensions: %d rows x %d cols", ui->max_rows,
+            ui->max_cols);
 
   // create new windows
   ui->header = newwin(3, ui->max_cols, 0, 0);
@@ -27,13 +33,20 @@ void init_ui(const char *starting_directory, UI *ui) {
   ui->queue_area = newwin(ui->max_rows - 5, ui->max_cols, 3, 0);
   ui->footer = newwin(2, ui->max_cols, ui->max_rows - 2, 0);
 
+  if (!ui->header || !ui->main_area || !ui->directory_selection ||
+      !ui->queue_area || !ui->footer) {
+    log_fatal("Failed to create one or more ncurses windows");
+    endwin();
+    exit(1);
+  }
+
   // directory setup
   ui->current_directory = strdup(starting_directory ? starting_directory : "");
   ui->item_uris = malloc(MAX_ITEMS * sizeof(char *));
   ui->item_types = malloc(MAX_ITEMS * sizeof(int));
-  // check for malloc failures
+
   if (!ui->item_uris || !ui->item_types) {
-    fprintf(stderr, "Memory allocation failed\n");
+    log_fatal("Memory allocation failed for item_uris / item_types");
     endwin();
     exit(1);
   }
@@ -52,6 +65,8 @@ void init_ui(const char *starting_directory, UI *ui) {
           MAX_PATH - 1);
   ui->input_buffer[MAX_PATH - 1] = '\0';
   ui->input_pos = strlen(ui->input_buffer);
+
+  log_debug("UI initialized successfully");
 }
 
 /**
@@ -60,7 +75,8 @@ void init_ui(const char *starting_directory, UI *ui) {
  * @param ui
  */
 void clean_tui(UI *ui) {
-  // after done looping clean up
+  log_debug("Cleaning up UI resources");
+
   free(ui->current_directory);
   for (int i = 0; i < ui->item_count; i++) {
     if (ui->item_uris[i])
@@ -78,8 +94,7 @@ void clean_tui(UI *ui) {
     free(ui->cached_image_path);
   }
 
-  // clean up album art path
-  unlink("/tmp/orpheus_cover.jpg"); // Delete when done
+  unlink("/tmp/orpheus_cover.jpg");
   free(ui->item_uris);
   free(ui->item_types);
   delwin(ui->header);
@@ -88,10 +103,13 @@ void clean_tui(UI *ui) {
   delwin(ui->queue_area);
   delwin(ui->footer);
   endwin();
+
+  log_debug("UI cleanup complete");
 }
 
 /**
- * @brief changes the time in UI headeralong with displaying which tab you're in
+ * @brief changes the time in UI header along with displaying which tab you're
+ * in
  *
  * @param ui
  */
@@ -100,23 +118,19 @@ void update_header(UI *ui) {
   struct tm *tm = localtime(&now);
   char time_str[20];
   strftime(time_str, sizeof(time_str), "%I:%M:%S", tm);
-  werase(ui->header);
 
-  // display time
+  werase(ui->header);
   box(ui->header, 0, 0);
   mvwprintw(ui->header, 1, 2, "Time: %s", time_str);
 
   const char *tab_names[] = {"Home", "Directory", "Queue", "Help"};
   int x_pos = 2;
   for (int i = 0; i < TAB_COUNT; i++) {
-    if ((Tab)i == ui->current_tab) {
-      // pretty sure this is like bolding
+    if ((Tab)i == ui->current_tab)
       wattron(ui->header, A_REVERSE);
-    }
     mvwprintw(ui->header, 2, x_pos, " %s ", tab_names[i]);
-    if ((Tab)i == ui->current_tab) {
+    if ((Tab)i == ui->current_tab)
       wattroff(ui->header, A_REVERSE);
-    }
     x_pos += strlen(tab_names[i]) + 3;
   }
   wrefresh(ui->header);
@@ -129,29 +143,29 @@ void update_header(UI *ui) {
  * @param ui
  */
 void update_directory_browser(struct mpd_connection *conn, UI *ui) {
-  // reset everything (assume values are there)
+  log_debug("Updating directory browser for path: '%s'", ui->current_directory);
+
+  // reset everything
   for (int i = 0; i < MAX_ITEMS; i++) {
     ui->item_uris[i] = NULL;
     ui->item_types[i] = 0;
   }
 
-  // free each item if theres a value
   for (int i = 0; i < ui->item_count; i++) {
     if (ui->item_uris[i])
       free(ui->item_uris[i]);
   }
   ui->item_count = 0;
 
-  // if we cant receive the list of meta data something went wrong
   if (!mpd_send_list_meta(conn, ui->current_directory[0] ? ui->current_directory
                                                          : NULL)) {
+    log_error("Failed to send list_meta MPD command for directory '%s': %s",
+              ui->current_directory, mpd_connection_get_error_message(conn));
     mvwprintw(ui->main_area, 2, 2, "Error sending MPD command");
     wrefresh(ui->main_area);
     return;
   }
 
-  // detect directory and songs, map these strings to item_uris and associate
-  // its type
   struct mpd_entity *entity;
   while ((entity = mpd_recv_entity(conn)) != NULL &&
          ui->item_count < MAX_ITEMS) {
@@ -168,8 +182,9 @@ void update_directory_browser(struct mpd_connection *conn, UI *ui) {
     ui->item_count++;
   }
 
-  // err handling
   if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) {
+    log_error("MPD error after receiving entities: %s",
+              mpd_connection_get_error_message(conn));
     mvwprintw(ui->main_area, 2, 2, "MPD error: %s",
               mpd_connection_get_error_message(conn));
     mpd_response_finish(conn);
@@ -178,8 +193,8 @@ void update_directory_browser(struct mpd_connection *conn, UI *ui) {
   }
 
   mpd_response_finish(conn);
+  log_debug("Directory browser loaded %d items", ui->item_count);
 
-  // draw subdirectories and items
   werase(ui->main_area);
   box(ui->main_area, 0, 0);
   mvwprintw(ui->main_area, 1, 2, "Directory: %s", ui->current_directory);
@@ -188,17 +203,14 @@ void update_directory_browser(struct mpd_connection *conn, UI *ui) {
     mvwprintw(ui->main_area, 2, 2, "No items found");
   } else {
     for (int j = 0; j < ui->item_count; j++) {
-      if (j == ui->selected_index) {
+      if (j == ui->selected_index)
         wattron(ui->main_area, A_REVERSE);
-      }
-      if (ui->item_types[j] == 0) {
+      if (ui->item_types[j] == 0)
         mvwprintw(ui->main_area, j + 2, 2, "%s/", ui->item_uris[j]);
-      } else {
+      else
         mvwprintw(ui->main_area, j + 2, 2, "%s", ui->item_uris[j]);
-      }
-      if (j == ui->selected_index) {
+      if (j == ui->selected_index)
         wattroff(ui->main_area, A_REVERSE);
-      }
     }
   }
   wrefresh(ui->main_area);
@@ -237,69 +249,70 @@ void help_screen(UI *ui) {
 
   mvwprintw(ui->main_area, 7, 2, "Directory Help:");
   mvwprintw(ui->main_area, 8, 2, "<UP> <DOWN>    | Scrolls up and down a list");
-  mvwprintw(ui->main_area, 9, 2, "<ESC>          | Goes up a directory]");
+  mvwprintw(ui->main_area, 9, 2, "<ESC>          | Goes up a directory");
   mvwprintw(ui->main_area, 10, 2,
-            "<ENTER>        | Goes down a directory and adds song to que");
+            "<ENTER>        | Goes down a directory and adds song to queue");
   wrefresh(ui->main_area);
 }
 
 void queue_screen(struct mpd_connection *conn, UI *ui) {
-  int i = 3; // loop counter for funs (start at 3 since error is on line 2, and
-             // title is on line 1)
+  int i = 3;
   werase(ui->main_area);
   box(ui->main_area, 0, 0);
-
   mvwprintw(ui->main_area, 1, 2, "Queue / Playlist:");
 
-  // queue processing
-  // ideally this should loop so we need a queue count
-
   struct mpd_status *status = mpd_run_status(conn);
-  ui->total_qsongs = mpd_status_get_queue_length(status);
-  unsigned start;
-  unsigned end;
-  if (ui->total_qsongs == 0) {
-    start = 0;
-    end = 0;
-  } else {
-    start = ui->queue_ctr % ui->total_qsongs;
-    end = (start + (ui->max_rows - 3)) % ui->total_qsongs;
-  }
-
-  // only grab as many songs as we can display
-  if (!mpd_send_list_queue_range_meta(conn, start, end)) {
-    // on error we print message
-    if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) {
-      fprintf(stderr, "Error sending list queue command: %s\n",
+  if (!status) {
+    log_error("Failed to get MPD status in queue_screen: %s",
               mpd_connection_get_error_message(conn));
-      mpd_connection_clear_error(conn);
-    } else
-      mvwprintw(ui->main_area, 2, 2, "Queue empty");
+    mpd_connection_clear_error(conn);
+    mvwprintw(ui->main_area, 2, 2, "Failed to get MPD status");
     wrefresh(ui->main_area);
     return;
   }
 
-  // get song by song
+  ui->total_qsongs = mpd_status_get_queue_length(status);
+  mpd_status_free(status);
+  log_debug("Queue length: %u", ui->total_qsongs);
+
+  unsigned start, end;
+  if (ui->total_qsongs == 0) {
+    mvwprintw(ui->main_area, 2, 2, "Queue empty");
+    wrefresh(ui->main_area);
+    return;
+  }
+
+  start = ui->queue_ctr % ui->total_qsongs;
+  end = start + (unsigned)(ui->max_rows - 3);
+  if (end > ui->total_qsongs)
+    end = ui->total_qsongs;
+
+  if (!mpd_send_list_queue_range_meta(conn, start, end)) {
+    if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) {
+      log_error("Failed to send list_queue_range_meta (start=%u end=%u): %s",
+                start, end, mpd_connection_get_error_message(conn));
+      mpd_connection_clear_error(conn);
+    }
+    mvwprintw(ui->main_area, 2, 2, "Queue empty");
+    wrefresh(ui->main_area);
+    return;
+  }
+
   struct mpd_entity *entity;
   while ((entity = mpd_recv_entity(conn)) != NULL) {
-    // find a song
     if (mpd_entity_get_type(entity) == MPD_ENTITY_TYPE_SONG) {
       struct mpd_song *song = (struct mpd_song *)mpd_entity_get_song(entity);
-      // song metadata
       unsigned pos = mpd_song_get_pos(song);
       const char *title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
       const char *artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
-
-      mvwprintw(ui->main_area, i, 2, "%u : %s -- %s", pos, title, artist);
+      mvwprintw(ui->main_area, i, 2, "%u : %s -- %s", pos,
+                title ? title : "Unknown", artist ? artist : "Unknown");
       i++;
     }
-
     mpd_entity_free(entity);
   }
 
-  // selection of queue items
-  // essentially we loop through some part of this
-
+  mpd_response_finish(conn);
   wrefresh(ui->main_area);
 }
 
@@ -312,115 +325,127 @@ void queue_screen(struct mpd_connection *conn, UI *ui) {
 void update_main_area(struct mpd_connection *conn, UI *ui) {
   werase(ui->main_area);
   box(ui->main_area, 0, 0);
+
   if (ui->show_directory_browser) {
     update_directory_browser(conn, ui);
-  } else if (ui->show_queue) {
+    return;
+  }
+  if (ui->show_queue) {
     queue_screen(conn, ui);
-  } else if (ui->show_help) {
+    return;
+  }
+  if (ui->show_help) {
     help_screen(ui);
-  } else {
-    mvwprintw(ui->main_area, 1, 2, "Orpheus - C-based Music Player");
-
-    // Display current song info
-    struct mpd_song *song = mpd_run_current_song(conn);
-    if (song == NULL) {
-      if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) {
-        mvwprintw(ui->main_area, 15, 2, "mpd song err: %s",
-                  mpd_connection_get_error_message(conn));
-        wrefresh(ui->footer);
-        mpd_connection_clear_error(conn);
-      }
-      return;
-    } else {
-      const char *artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
-      const char *title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
-      const char *album = mpd_song_get_tag(song, MPD_TAG_ALBUM, 0);
-      mvwprintw(ui->main_area, ui->max_rows - 10, 2, "Artist: %s",
-                artist ? artist : "Unknown");
-      mvwprintw(ui->main_area, ui->max_rows - 9, 2, "Title: %s",
-                title ? title : "Unknown");
-      mvwprintw(ui->main_area, ui->max_rows - 8, 2, "Album: %s",
-                album ? album : "Unknown");
-
-      struct mpd_status *status = mpd_run_status(conn);
-      if (status) {
-        if (mpd_status_get_state(status) == MPD_STATE_PLAY ||
-            mpd_status_get_state(status) == MPD_STATE_PAUSE) {
-          // Get song uri
-          const char *song_uri = mpd_song_get_uri(song);
-
-          if (song_uri == NULL) {
-            mvwprintw(ui->main_area, 18, 2, "No song uri");
-            mpd_status_free(status);
-            wrefresh(ui->footer);
-            return;
-          }
-
-          void *buff;
-          size_t buff_size = 8192;
-          buff = malloc(buff_size);
-          int offset = 0;
-          int read_size;
-
-          FILE *fp = fopen("/tmp/orpheus_cover.jpg", "wb");
-          if (fp == NULL) {
-            free(buff);
-            mvwprintw(ui->main_area, 18, 2, "Null fp");
-            wrefresh(ui->main_area);
-            return;
-          }
-
-          // it seems like we need to read the image chunks at a time
-          // not sure but once we read one block we should write it and move
-          // onto the next. we can read album art ! this is somehow breaking
-          // everything lmao idk what im doing
-          do {
-            read_size =
-                mpd_run_albumart(conn, song_uri, offset, buff, buff_size);
-            if (read_size == -1) {
-              // free heap stuff
-              fclose(fp);
-              free(buff);
-              mpd_status_free(status);
-
-              // errr msg
-              mvwprintw(ui->main_area, 18, 2, "Cannot read album art: %s",
-                        mpd_connection_get_error_message(conn));
-              mpd_connection_clear_error(
-                  conn); // clear error so we dont have soft crash
-
-              // yeet outta here
-              wrefresh(ui->main_area);
-              return;
-            }
-            fwrite(buff, 1, read_size, fp);
-            offset += read_size; // move by amt returned
-
-          } while (read_size > 0);
-
-          // Display ASCII art from test image
-          image_to_ascii(ui, conn, "/tmp/orpheus_cover.jpg");
-          fclose(fp);
-          free(buff);
-
-        } else {
-          // catch when we dont have any music or art to display
-          if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) {
-            mvwprintw(ui->main_area, 18, 2, "Album art error: %s",
-                      mpd_connection_get_error_message(conn));
-            mpd_connection_clear_error(conn);
-          }
-        }
-
-        mpd_status_free(status);
-      } else {
-        mvwprintw(ui->footer, 1, 2, "No status");
-      }
-
-      mpd_song_free(song);
-    }
+    return;
   }
 
+  // --- Home screen ---
+  mvwprintw(ui->main_area, 1, 2, "Orpheus - C-based Music Player");
+
+  struct mpd_song *song = mpd_run_current_song(conn);
+  if (song == NULL) {
+    if (mpd_connection_get_error(conn) != MPD_ERROR_SUCCESS) {
+      log_error("Failed to get current song: %s",
+                mpd_connection_get_error_message(conn));
+      mvwprintw(ui->main_area, 15, 2, "mpd song err: %s",
+                mpd_connection_get_error_message(conn));
+      mpd_connection_clear_error(conn);
+    } else {
+      log_debug("No current song playing");
+    }
+    wrefresh(ui->main_area);
+    return;
+  }
+
+  const char *artist = mpd_song_get_tag(song, MPD_TAG_ARTIST, 0);
+  const char *title = mpd_song_get_tag(song, MPD_TAG_TITLE, 0);
+  const char *album = mpd_song_get_tag(song, MPD_TAG_ALBUM, 0);
+  const char *song_uri = mpd_song_get_uri(song);
+
+  log_debug("Current song: '%s' by '%s' (album: '%s', uri: '%s')",
+            title ? title : "Unknown", artist ? artist : "Unknown",
+            album ? album : "Unknown", song_uri ? song_uri : "Unknown");
+
+  mvwprintw(ui->main_area, ui->max_rows - 10, 2, "Artist: %s",
+            artist ? artist : "Unknown");
+  mvwprintw(ui->main_area, ui->max_rows - 9, 2, "Title: %s",
+            title ? title : "Unknown");
+  mvwprintw(ui->main_area, ui->max_rows - 8, 2, "Album: %s",
+            album ? album : "Unknown");
+
+  struct mpd_status *status = mpd_run_status(conn);
+  if (!status) {
+    log_error("Failed to get MPD status in update_main_area: %s",
+              mpd_connection_get_error_message(conn));
+    mpd_connection_clear_error(conn);
+    mvwprintw(ui->main_area, ui->max_rows - 7, 2, "No status");
+    mpd_song_free(song);
+    wrefresh(ui->main_area);
+    return;
+  }
+
+  enum mpd_state state = mpd_status_get_state(status);
+  mpd_status_free(status);
+
+  if (state != MPD_STATE_PLAY && state != MPD_STATE_PAUSE) {
+    mpd_song_free(song);
+    wrefresh(ui->main_area);
+    return;
+  }
+
+  if (song_uri == NULL) {
+    log_warn("Current song has no URI, cannot fetch album art");
+    mvwprintw(ui->main_area, 18, 2, "No song URI");
+    mpd_song_free(song);
+    wrefresh(ui->main_area);
+    return;
+  }
+
+  // --- Album art fetch ---
+  void *buff = malloc(8192);
+  if (!buff) {
+    log_error("Failed to allocate album art read buffer");
+    mpd_song_free(song);
+    wrefresh(ui->main_area);
+    return;
+  }
+
+  FILE *fp = fopen("/tmp/orpheus_cover.jpg", "wb");
+  if (fp == NULL) {
+    log_error("Failed to open /tmp/orpheus_cover.jpg for writing");
+    free(buff);
+    mvwprintw(ui->main_area, 18, 2, "Cannot open temp file");
+    mpd_song_free(song);
+    wrefresh(ui->main_area);
+    return;
+  }
+
+  int offset = 0;
+  int read_size;
+  do {
+    read_size = mpd_run_albumart(conn, song_uri, offset, buff, 8192);
+    if (read_size == -1) {
+      log_warn("Album art not available for '%s': %s", song_uri,
+               mpd_connection_get_error_message(conn));
+      fclose(fp);
+      free(buff);
+      mpd_connection_clear_error(conn);
+      unlink("/tmp/orpheus_cover.jpg");
+      mvwprintw(ui->main_area, 18, 2, "No album art available");
+      mpd_song_free(song);
+      wrefresh(ui->main_area);
+      return;
+    }
+    fwrite(buff, 1, read_size, fp);
+    offset += read_size;
+  } while (read_size > 0);
+
+  fclose(fp);
+  free(buff);
+  log_debug("Album art written to /tmp/orpheus_cover.jpg (%d bytes)", offset);
+
+  image_to_ascii(ui, conn, "/tmp/orpheus_cover.jpg");
+  mpd_song_free(song);
   wrefresh(ui->main_area);
 }
 
@@ -429,7 +454,6 @@ void update_main_area(struct mpd_connection *conn, UI *ui) {
  *
  * @param conn
  * @param ui
- * @return update
  */
 void update_footer(struct mpd_connection *conn, UI *ui) {
   werase(ui->footer);
@@ -437,19 +461,21 @@ void update_footer(struct mpd_connection *conn, UI *ui) {
 
   struct mpd_status *status = mpd_run_status(conn);
   if (!status) {
-    mvwprintw(ui->footer, 1, 2, "MPD error: %s",
+    log_error("Failed to get MPD status in update_footer: %s",
               mpd_connection_get_error_message(conn));
     mpd_connection_clear_error(conn);
+    mvwprintw(ui->footer, 1, 2, "MPD error: no status");
     wrefresh(ui->footer);
     return;
   }
+
   switch (mpd_status_get_state(status)) {
-  case MPD_STATE_PLAY:
-    // visualizer movement
+  case MPD_STATE_PLAY: {
     static int pos = 0;
     pos = (pos + 1) % (ui->max_cols - 4);
     mvwprintw(ui->footer, 1, 2 + pos, "|");
     break;
+  }
   case MPD_STATE_PAUSE:
     mvwprintw(ui->footer, 1, 2, "Paused");
     break;
@@ -457,122 +483,92 @@ void update_footer(struct mpd_connection *conn, UI *ui) {
     mvwprintw(ui->footer, 1, 2, "Stopped");
     break;
   default:
-    mvwprintw(ui->footer, 1, 2, "Unknown (default switch)");
+    mvwprintw(ui->footer, 1, 2, "Unknown state");
     break;
   }
 
-  mpd_response_finish(conn);
+  mpd_status_free(status);
   wrefresh(ui->footer);
 }
 
 /**
- * @brief Main tui loop that gets user input, default is main screen but user
- * can switch screens This is what is called by main
+ * @brief Main tui loop
+ *
  * @param conn
  * @param ui
  */
 void run_tui(struct mpd_connection *conn, UI *ui) {
+  log_info("Starting TUI event loop");
+
   int current_win = 0;
   int ch;
   timeout(500);
 
-  // while we haven't quit
   while ((ch = getch()) != 'q') {
-    // looping window tabs
+
+    // --- Tab switching ---
     if (ch == KEY_LEFT) {
-      if (current_win == 0) {
-        current_win = 3;
-      } else {
-        current_win -= 1;
-      }
+      current_win = (current_win == 0) ? 3 : current_win - 1;
+      log_debug("Switched to tab %d (left)", current_win);
     }
     if (ch == KEY_RIGHT) {
-      if (current_win == 3) {
-        current_win = 0;
-      } else {
-        current_win += 1;
-      }
+      current_win = (current_win == 3) ? 0 : current_win + 1;
+      log_debug("Switched to tab %d (right)", current_win);
     }
 
-    // play / pause status
+    // --- Playback controls ---
     if (ch == 'p') {
-      if (!mpd_send_status(conn)) {
-        mvwprintw(ui->main_area, ui->item_count + 2, 2,
-                  "Failed to get status: %s",
+      struct mpd_status *status = mpd_run_status(conn);
+      if (!status) {
+        log_error("Failed to get status for play/pause: %s",
                   mpd_connection_get_error_message(conn));
-        wrefresh(ui->main_area);
-        mpd_response_finish(conn);
-        break;
-      }
+        mpd_connection_clear_error(conn);
+      } else {
+        enum mpd_state state = mpd_status_get_state(status);
+        mpd_status_free(status);
 
-      // get status to switch play / pause
-      struct mpd_status *status = mpd_recv_status(conn);
-      if (status) {
-        switch (mpd_status_get_state(status)) {
-        // switch play -> pause or fail
-        case MPD_STATE_PLAY:
-          if (mpd_run_pause(conn, true)) {
-            mvwprintw(ui->main_area, ui->item_count + 3, 2, "Paused");
-          } else {
-            mvwprintw(ui->main_area, ui->item_count + 3, 2,
-                      "Failed to pause: %s",
+        if (state == MPD_STATE_PLAY) {
+          log_info("Pausing playback");
+          if (!mpd_run_pause(conn, true)) {
+            log_error("Failed to pause: %s",
                       mpd_connection_get_error_message(conn));
             mpd_connection_clear_error(conn);
           }
-          break;
-        case MPD_STATE_PAUSE:
-        case MPD_STATE_STOP:
-          if (mpd_run_play(conn)) {
-            mvwprintw(ui->main_area, ui->item_count + 3, 2, "Playing");
-          } else {
-            mvwprintw(ui->main_area, ui->item_count + 3, 2,
-                      "Failed to play: %s",
+        } else {
+          log_info("Starting playback");
+          if (!mpd_run_play(conn)) {
+            log_error("Failed to play: %s",
                       mpd_connection_get_error_message(conn));
+            mpd_connection_clear_error(conn);
           }
-          break;
-          // unknown state
-        default:
-          mvwprintw(ui->main_area, ui->item_count + 2, 2,
-                    "Unknown playback state");
-          break;
         }
-        mpd_status_free(status);
-      } else {
-        mvwprintw(ui->main_area, ui->item_count + 2, 2, "No status available");
       }
-      mpd_response_finish(conn);
-      wrefresh(ui->main_area);
-    }
-
-    // skip to next song
-    else if (ch == ']') {
+    } else if (ch == ']') {
+      log_info("Skipping to next song");
       if (!mpd_run_next(conn)) {
-        mvwprintw(ui->main_area, 10, 10, "Error skipping song: %s",
+        log_error("Failed to skip to next song: %s",
                   mpd_connection_get_error_message(conn));
         mpd_connection_clear_error(conn);
       }
     } else if (ch == '[') {
+      log_info("Going to previous song");
       if (!mpd_run_previous(conn)) {
-        mvwprintw(ui->main_area, 10, 10, "Error running prev song: %s",
+        log_error("Failed to go to previous song: %s",
                   mpd_connection_get_error_message(conn));
         mpd_connection_clear_error(conn);
       }
-
     } else if (ch == KEY_BACKSPACE) {
-      // clear the mpd queue
+      log_info("Clearing MPD queue");
       if (!mpd_run_clear(conn)) {
-        mvwprintw(ui->main_area, 10, 10, "Error clearing song: %s",
+        log_error("Failed to clear queue: %s",
                   mpd_connection_get_error_message(conn));
         mpd_connection_clear_error(conn);
       }
     }
 
-    // once we enter in the directory browser we can search for music in the
-    // user defined dir
+    // --- Directory browser input ---
     else if (ui->show_directory_browser) {
-      // explore directory
       switch (ch) {
-      // scroll up and down
       case KEY_UP:
         if (ui->selected_index > 0)
           ui->selected_index--;
@@ -581,30 +577,32 @@ void run_tui(struct mpd_connection *conn, UI *ui) {
         if (ui->selected_index < ui->item_count - 1)
           ui->selected_index++;
         break;
-
-      // select a directory or add song to queue
       case '\n':
         if (ui->item_count == 0 || ui->selected_index < 0 ||
-            ui->selected_index >= ui->item_count) {
-          break; // No valid selection
-        }
-        // go down directory
+            ui->selected_index >= ui->item_count)
+          break;
         if (ui->item_types[ui->selected_index] == 0) {
-          char *new_dir = ui->item_uris[ui->selected_index];
+          log_debug("Entering directory: %s",
+                    ui->item_uris[ui->selected_index]);
           free(ui->current_directory);
-          ui->current_directory = strdup(new_dir);
+          ui->current_directory = strdup(ui->item_uris[ui->selected_index]);
           ui->selected_index = 0;
-        }
-        // add song to queue
-        else {
+        } else {
+          log_info("Adding song to queue: %s",
+                   ui->item_uris[ui->selected_index]);
           if (mpd_run_add(conn, ui->item_uris[ui->selected_index])) {
             mvwprintw(ui->main_area, ui->item_count + 2, 2, "Song added");
             if (!mpd_run_play(conn)) {
+              log_error("Failed to start playback after add: %s",
+                        mpd_connection_get_error_message(conn));
               mvwprintw(ui->main_area, ui->item_count + 3, 2,
                         "Failed to play: %s",
                         mpd_connection_get_error_message(conn));
             }
           } else {
+            log_error("Failed to add song '%s': %s",
+                      ui->item_uris[ui->selected_index],
+                      mpd_connection_get_error_message(conn));
             mvwprintw(ui->main_area, ui->item_count + 2, 2,
                       "Failed to add song: %s",
                       mpd_connection_get_error_message(conn));
@@ -613,68 +611,71 @@ void run_tui(struct mpd_connection *conn, UI *ui) {
           mpd_response_finish(conn);
         }
         break;
-        // go up a dir
-      case 27:
+      case 27: // ESC — go up a directory
+      {
         char *parent = get_parent_directory(ui->current_directory);
         if (parent) {
+          log_debug("Going up to parent directory: %s", parent);
           free(ui->current_directory);
           ui->current_directory = parent;
           ui->selected_index = 0;
         }
         break;
       }
+      }
     }
-    // wish i wrote the comments for this cause idont remember char codes
+
+    // --- Directory selection input ---
     else if (ui->show_directory_selection) {
       if (ch == '\n') {
+        log_info("Directory selection confirmed: '%s'", ui->input_buffer);
         free(ui->current_directory);
         ui->current_directory = strdup(ui->input_buffer);
         ui->show_directory_selection = false;
-      } else if (ch == 27) // escape code
-      {
-        // Esc
+      } else if (ch == 27) {
+        log_debug("Directory selection cancelled");
         strncpy(ui->input_buffer, ui->current_directory, MAX_PATH - 1);
         ui->input_buffer[MAX_PATH - 1] = '\0';
         ui->input_pos = strlen(ui->input_buffer);
         ui->show_directory_selection = false;
       } else if (ch == KEY_BACKSPACE || ch == 127) {
-        if (ui->input_pos > 0) {
+        if (ui->input_pos > 0)
           ui->input_buffer[--ui->input_pos] = '\0';
-        }
       } else if (ch >= 32 && ch <= 126 && ui->input_pos < MAX_PATH - 1) {
         ui->input_buffer[ui->input_pos++] = ch;
         ui->input_buffer[ui->input_pos] = '\0';
       }
-    } else if (ui->show_queue) {
+    }
+
+    // --- Queue scroll input ---
+    else if (ui->show_queue) {
       if (ch == KEY_UP) {
-        ui->queue_ctr =
-            (ui->queue_ctr + 1 + ui->total_qsongs) % ui->total_qsongs;
+        if (ui->total_qsongs > 0)
+          ui->queue_ctr =
+              (ui->queue_ctr + ui->total_qsongs - 1) % ui->total_qsongs;
       } else if (ch == KEY_DOWN) {
-        ui->queue_ctr = (ui->queue_ctr + 1) % ui->total_qsongs;
+        if (ui->total_qsongs > 0)
+          ui->queue_ctr = (ui->queue_ctr + 1) % ui->total_qsongs;
       }
     }
 
-    // update current window
+    // --- Update active tab state ---
     switch (current_win) {
-    // home
     case 0:
       ui->show_directory_browser = false;
       ui->show_queue = false;
       ui->show_help = false;
       break;
-    // directory
     case 1:
       ui->show_directory_browser = true;
       ui->show_help = false;
       ui->show_queue = false;
       break;
-    // playlist
     case 2:
       ui->show_directory_browser = false;
       ui->show_queue = true;
       ui->show_help = false;
       break;
-    // help
     case 3:
       ui->show_directory_browser = false;
       ui->show_help = true;
@@ -689,6 +690,8 @@ void run_tui(struct mpd_connection *conn, UI *ui) {
     update_main_area(conn, ui);
     update_footer(conn, ui);
   }
+
+  log_info("User quit TUI (pressed 'q')");
 }
 
 /**
@@ -703,7 +706,6 @@ char *get_parent_directory(const char *path) {
   }
 
   char *last_slash = strrchr(path, '/');
-
   if (last_slash == NULL) {
     return strdup("");
   }

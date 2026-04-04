@@ -1,4 +1,5 @@
 #include "../include/lua_config.h"
+#include "../include/log.h"
 #include <stdio.h>
 #include <unistd.h>
 
@@ -107,15 +108,11 @@ int config_load(OrpheusConfig *cfg, const char *config_path) {
 
   // music_directory
   char *raw_dir = lua_get_string(L, "music_directory");
+  log_debug("Music Dir: %s", raw_dir);
   if (raw_dir) {
-    char *expanded = expand_tilde(raw_dir);
-    free(raw_dir);
-
-    char *relative = make_mpd_relative(expanded);
-    free(expanded);
-
     free(cfg->starting_directory);
-    cfg->starting_directory = relative;
+    cfg->starting_directory = expand_tilde(raw_dir);
+    free(raw_dir);
   }
 
   // connection_type

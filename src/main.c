@@ -24,6 +24,17 @@ UI ui;
 
 int main() {
 
+  // setup logging
+  FILE *logfile = fopen("/tmp/orpheus.log", "w");
+  if (logfile) {
+    // going to make this into a flag we can use later or maybe an env var ?
+    log_add_fp(logfile, LOG_DEBUG);
+    log_set_quiet(true);
+  } else {
+    fclose(logfile);
+    log_warn("no logfile for this session");
+  }
+
   // init
   OrpheusConfig cfg;
   config_init(&cfg); // defaults
@@ -70,6 +81,7 @@ int main() {
   run_tui(conn, &ui);
 
   // cleanup
+  fclose(logfile);
   clean_tui(&ui);
   config_free(&cfg);
   mpd_connection_free(conn);
