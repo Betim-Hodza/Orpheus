@@ -55,6 +55,7 @@ set(SOURCES
     src/ui.c
     src/lua_config.c
 		src/img_to_ascii.c
+		src/log.c
 )
 
 # Add executable

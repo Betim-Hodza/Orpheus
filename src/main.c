@@ -5,6 +5,7 @@
 // * note: want to create config file in lua, will learn how to do so
 // * support both unix socket and loopback network connections
 
+#include "../include/log.h"
 #include "../include/lua_config.h"
 #include "../include/mpd_connections.h"
 #include "../include/ui.h"
@@ -36,7 +37,7 @@ int main() {
   } else if (strcmp(cfg.connection_type, "network") == 0) {
     conn = mpd_connection_new(cfg.host, cfg.port, 0);
   } else {
-    printf("bad connection type? shrug\n");
+    log_fatal("bad connection type? shrug");
     config_free(&cfg);
     if (isendwin() == FALSE)
       endwin();
@@ -44,7 +45,7 @@ int main() {
   }
   validate_connection(conn);
 
-  printf("Before init ncurses\n");
+  log_debug("Before init ncurses");
 
   // init ncurses
   initscr();
@@ -53,17 +54,17 @@ int main() {
   noecho();
   curs_set(0);
 
-  printf("After init ncurses \n");
+  log_debug("After init ncurses");
 
-  printf("Before init ui \n");
+  log_debug("Before init ui");
 
   // initialize our ui
   init_ui(cfg.starting_directory, &ui);
   free(cfg.starting_directory);
 
-  printf("After init ui \n");
+  log_debug("After init ui");
 
-  printf("Before run tui \n");
+  log_debug("Before run tui");
 
   // run tui
   run_tui(conn, &ui);
