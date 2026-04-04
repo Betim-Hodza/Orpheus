@@ -7,8 +7,15 @@ project(orpheus VERSION 1.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Enable debugging symbols
-set(CMAKE_BUILD_TYPE Debug)
+# Enable debugging symbols (can be overridden)
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
+
+# Options for testing and code quality
+option(ENABLE_TESTS "Enable unit tests" OFF)
+option(ENABLE_COVERAGE "Enable code coverage" OFF)
+option(ENABLE_SANITIZERS "Enable sanitizers for debugging" OFF)
 
 # Find dependencies
 find_package(PkgConfig REQUIRED)
@@ -81,3 +88,20 @@ set_target_properties(orpheus
 
 # Install target
 install(TARGETS orpheus DESTINATION bin)
+
+# Testing support for local development
+if(ENABLE_TESTS)
+    enable_testing()
+    # Test setup will be added here when tests are implemented
+endif()
+
+# Code coverage support
+if(ENABLE_COVERAGE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} --coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+endif()
+
+# Sanitizer support for debugging
+if(ENABLE_SANITIZERS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fsanitize=undefined")
+endif()

@@ -1,95 +1,148 @@
 #include "../include/lua_config.h"
 #include <stdio.h>
+#include <unistd.h>
 
-void config_lua(lua_State *L, char *starting_directory, char *connection_type, char *socket_path, char *host, int *port)
-{
-    // Places to check for config should be in current dir, and ~/.config/orpheus/config.lua
-    if ( (luaL_dofile(L, "config.lua") == LUA_OK) || (luaL_dofile(L, "~/.config/orpheus/config.lua") == LUA_OK) )
-    {
-        lua_getglobal(L, "music_directory");
-        if (lua_isstring(L, -1))
-        {
-            const char *lua_path = lua_tostring(L, -1);
-            if (lua_path[0] == '~' && (lua_path[1] == '/' || lua_path[1] == '\0'))
-            {
-                const char *home = getenv("HOME");
-                if (home)
-                {
-                    // get home path
-                    size_t home_len = strlen(home);
-                    size_t path_len = strlen(lua_path + 1);
-                    char *expanded = malloc(home_len + path_len + 2);
-                    strcpy(expanded, home);
-                    if (path_len > 0 && lua_path[1] == '/')
-                        strcat(expanded, lua_path + 1);
-                    else if (path_len > 0)
-                    {
-                        strcat(expanded, "/");
-                        strcat(expanded, lua_path + 1);
-                    }
-                    free(starting_directory);
-                    starting_directory = expanded;
-                }
-            }
-            else
-            {
-                free(starting_directory);
-                starting_directory = strdup(lua_path);
-            }
-            // Convert absolute path to relative if it starts with MPD's music_directory
-            char mpd_music_dir[256];  // This shouldn't be that big, but if it becomes a problem oh well
-            const char *user = getenv("USER");
-            if (user != NULL) 
-            {
-                snprintf(mpd_music_dir, sizeof(mpd_music_dir), "/home/%s/Music", user);
-            }
-            else 
-            {
-                perror("No user detected through getenv('USER')\nExiting...");
-                exit(1);
-            }
-            size_t mpd_len = strlen(mpd_music_dir);
+// expand ~ to $HOME
+static char *expand_tilde(const char *path) {
+  if (!path || path[0] != '~')
+    return path ? strdup(path) : NULL;
 
-            // Check if starting_directory begins with mpd_music_dir (length mpd_len) and is either
-            // exactly mpd_music_dir or a subdirectory (ends with '/' or '\0')	
-            if (strncmp(starting_directory, mpd_music_dir, mpd_len) == 0 && 
-            (starting_directory[mpd_len] == '/' || starting_directory[mpd_len] == '\0'))
-            {
-                char *relative = strdup(starting_directory + mpd_len + (starting_directory[mpd_len] == '/' ? 1 : 0));
-                free(starting_directory);
-                starting_directory = relative;
-            }
-        }
-        lua_pop(L, 1);
+  const char *home = getenv("HOME");
+  if (!home)
+    home = "/";
 
-        // get lua configuration
-        lua_getglobal(L, "connection_type");
-        if (lua_isstring(L, -1))
-        {
-            connection_type = strdup(lua_tostring(L, -1));
-        }
-        lua_pop(L, 1);
+  // +1 for NULL skip the ~
+  size_t len = strlen(home) + strlen(path + 1) + 1;
+  char *out = malloc(len);
+  if (!out)
+    return NULL;
+  snprintf(out, len, "%s%s", home, path + 1);
+  return out;
+}
 
-        lua_getglobal(L, "socket_path");
-        if (lua_isstring(L, -1))
-        {
-            socket_path = strdup(lua_tostring(L, -1));
-        }
-        lua_pop(L, 1);
+// strip the MPD Music root prefix from absolute path
+// so MPD recieve a relative URI. If doesn't start with root
+// value is unchanged (it's relative)
+static char *make_mpd_relative(const char *abs_path) {
+  const char *home = getenv("HOME");
+  if (!home)
+    return strdup(abs_path);
 
-        lua_getglobal(L, "host");
-        if (lua_isstring(L, -1))
-        {
-            host = strdup(lua_tostring(L, -1));
-        }
-        lua_pop(L, 1);
+  // build root: $HOME/Music
+  size_t root_len = strlen(home) + strlen("/Music");
+  char *music_root = malloc(root_len + 1);
+  if (!music_root)
+    return strdup(abs_path);
+  snprintf(music_root, root_len + 1, "%s/Music", home);
 
-        lua_getglobal(L, "port");
-        if (lua_isnumber(L, -1))
-        {
-            *port = (int)lua_tointeger(L, -1);
-        }
-        lua_pop(L, 1);
-    }
+  char *result;
+  if (strncmp(abs_path, music_root, root_len) == 0 &&
+      (abs_path[root_len] == '/' || abs_path[root_len] == '\0')) {
+    // skip past root + trailing slash
+    const char *rel = abs_path + root_len + (abs_path[root_len] == '/' ? 1 : 0);
+    result = strdup(rel);
+  } else {
+    result = strdup(abs_path);
+  }
+
+  free(music_root);
+  return result;
+}
+
+// pull string global from lua stack, null if not present
+static char *lua_get_string(lua_State *L, const char *name) {
+  lua_getglobal(L, name);
+  char *val = NULL;
+  if (lua_isstring(L, -1))
+    val = strdup(lua_tostring(L, -1));
+  lua_pop(L, 1);
+  return val;
+}
+
+// pull int global, returns default_val if not present
+static int lua_get_int(lua_State *L, const char *name, int default_val) {
+  lua_getglobal(L, name);
+  int val = default_val;
+  if (lua_isnumber(L, -1))
+    val = (int)lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  return val;
+}
+
+void config_init(OrpheusConfig *cfg) {
+  cfg->starting_directory = strdup("");
+  cfg->connection_type = strdup("socket");
+  cfg->socket_path = NULL;
+  cfg->host = NULL;
+  cfg->port = 6600;
+}
+
+void config_free(OrpheusConfig *cfg) {
+  free(cfg->starting_directory);
+  cfg->starting_directory = NULL;
+  free(cfg->connection_type);
+  cfg->connection_type = NULL;
+  free(cfg->socket_path);
+  cfg->socket_path = NULL;
+  free(cfg->host);
+  cfg->host = NULL;
+}
+
+int config_load(OrpheusConfig *cfg, const char *config_path) {
+  lua_State *L = luaL_newstate();
+  if (!L)
+    return 0;
+  luaL_openlibs(L);
+
+  // Expand tilde in the config file path itself
+  char *expanded_cfg = expand_tilde(config_path);
+  int ok = (luaL_dofile(L, expanded_cfg) == LUA_OK);
+  free(expanded_cfg);
+
+  if (!ok) {
+    fprintf(stderr, "lua config error: %s\n", lua_tostring(L, -1));
     lua_close(L);
+    return 0;
+  }
+
+  // music_directory
+  char *raw_dir = lua_get_string(L, "music_directory");
+  if (raw_dir) {
+    char *expanded = expand_tilde(raw_dir);
+    free(raw_dir);
+
+    char *relative = make_mpd_relative(expanded);
+    free(expanded);
+
+    free(cfg->starting_directory);
+    cfg->starting_directory = relative;
+  }
+
+  // connection_type
+  char *conn_type = lua_get_string(L, "connection_type");
+  if (conn_type) {
+    free(cfg->connection_type);
+    cfg->connection_type = conn_type;
+  }
+
+  // socket_path
+  char *sock = lua_get_string(L, "socket_path");
+  if (sock) {
+    free(cfg->socket_path);
+    cfg->socket_path = sock;
+  }
+
+  // host/port
+  char *host = lua_get_string(L, "host");
+  if (host) {
+    free(cfg->host);
+    cfg->host = host;
+  }
+
+  int port = lua_get_int(L, "port", 0);
+  if (port > 0)
+    cfg->port = port;
+
+  lua_close(L);
+  return 1;
 }
