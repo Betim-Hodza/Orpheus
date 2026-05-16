@@ -61,7 +61,7 @@ struct UI
   // turn on and off screens
   bool show_directory_selection = false;
   std::string input_buffer;
-  Tab current_tab = home;
+  Tab current_tab = Tab::home;
 
   // ascii album art
   std::vector<std::string> ascii_art;

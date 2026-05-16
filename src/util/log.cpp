@@ -31,3 +31,8 @@ void FileLogger::log(const std::string &message)
     Util::debugPrint("Attempt to write to closed file");
   }
 }
+
+std::streambuf *FileLogger::rdbuf()
+{
+  return log_file.rdbuf();
+}

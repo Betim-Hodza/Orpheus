@@ -8,6 +8,7 @@
 #include "../include/log.hpp"
 #include "../include/ui.hpp"
 #include "../include/util.hpp"
+#include <iostream>
 #include <lauxlib.h>
 #include <lualib.h>
 #include <ncurses.h>
@@ -28,7 +29,7 @@ int main()
 
   // find current music directory
   Util::debugPrint("Looking for music dir: ~/Music");
-  std::filesystem::path music_path = Util::expand_home("~/Music");
+  std::filesystem::path music_path = Util::expandHome("~/Music");
 
   Util::debugPrint("Initializing Orpheus");
 
@@ -46,6 +47,8 @@ int main()
   ui_manager.run();
 
   Util::debugPrint("Cleaning TUI up");
+  // restore this so we dont segfault
+  std::cout.rdbuf(old_cout);
 
   return 0;
 }

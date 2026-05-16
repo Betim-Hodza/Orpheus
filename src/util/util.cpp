@@ -2,6 +2,7 @@
 #include "../../include/util.hpp"
 #include <cstdlib>
 #include <format>
+#include <iostream>
 
 namespace Util
 {
@@ -13,7 +14,7 @@ namespace Util
 std::filesystem::path expandHome(std::string_view path)
 {
   // early return if no ~
-  if (path.empty() || path[0] != `~`)
+  if (path.empty() || path[0] != '~')
     return path;
 
   // get home env var from terminal

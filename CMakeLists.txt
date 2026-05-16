@@ -30,10 +30,8 @@ endif()
 # Source files
 set(SOURCES
     src/main.cpp
-    src/ui/img_to_ascii.cpp
     src/ui/ui.cpp
     src/util/log.cpp
-    src/util/mpd_connections.cpp
     src/util/util.cpp
 )
 
@@ -52,11 +50,6 @@ target_link_libraries(orpheus PRIVATE
     ${NCURSES_LIBRARIES}
     ${LUA_LIBRARIES}
     ${TAGLIB_LIBRARIES}
-)
-
-# Header-only lib implementation (defined in img_to_ascii.cpp only)
-set_source_files_properties(src/ui/img_to_ascii.cpp PROPERTIES
-    COMPILE_DEFINITIONS "STB_IMAGE_IMPLEMENTATION"
 )
 
 if(ENABLE_FFMPEG)

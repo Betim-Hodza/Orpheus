@@ -1,5 +1,6 @@
 #include "../../include/ui.hpp"
 #include "../../include/log.hpp"
+#include "../../include/util.hpp"
 #include <ctime>
 #include <iomanip>
 #include <ncurses.h>
@@ -52,10 +53,10 @@ std::string UIManager::getParentDirectory(const std::string &path)
  * */
 void UIManager::init(const std::filesystem::path &music_root)
 {
-  Util::printDebug("initializing UI with music root: " + music_root.string());
+  Util::debugPrint("initializing UI with music root: " + music_root.string());
 
   getmaxyx(stdscr, state.max_rows, state.max_cols);
-  Util::printDebug("Terminal dimensions: " + std::to_string(state.max_rows) + " x " + std::to_string(state.max_cols));
+  Util::debugPrint("Terminal dimensions: " + std::to_string(state.max_rows) + " x " + std::to_string(state.max_cols));
 
   state.header = newwin(3, state.max_cols, 0, 0);
   state.main_area = newwin(state.max_rows - 5, state.max_cols, 3, 0);
@@ -65,7 +66,7 @@ void UIManager::init(const std::filesystem::path &music_root)
 
   if (!state.header || !state.main_area || !state.directory_selection || !state.queue_area || !state.footer)
   {
-    Util::printDebug("Failed to create one or more ncurses windows");
+    Util::debugPrint("Failed to create one or more ncurses windows");
     endwin();
     exit(1);
   }
@@ -74,7 +75,7 @@ void UIManager::init(const std::filesystem::path &music_root)
   state.current_directory = "";
   state.current_tab = Tab::home;
 
-  Util::printDebug("UI initialized successfully");
+  Util::debugPrint("UI initialized successfully");
 }
 
 /* *
@@ -147,7 +148,6 @@ void UIManager::helpScreen()
  * */
 void UIManager::queueScreen()
 {
-  int i = 3;
   werase(state.main_area);
   box(state.main_area, 0, 0);
   mvwprintw(state.main_area, 1, 2, "Queue / Playlist:");
@@ -262,7 +262,7 @@ void UIManager::updateMainArea()
  * */
 void UIManager::run()
 {
-  Util::printDebug("Starting TUI event loop");
+  Util::debugPrint("Starting TUI event loop");
   int ch;
   timeout(500);
 
@@ -349,5 +349,5 @@ void UIManager::run()
     updateFooter();
   }
 
-  Util::printDebug("User has quit TUI");
+  Util::debugPrint("User has quit TUI");
 }
