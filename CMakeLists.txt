@@ -27,34 +27,24 @@ if(ENABLE_FFMPEG)
     add_compile_definitions(ORPHEUS_FFMPEG)
 endif()
 
-# Include directories
-include_directories(
-    ${CMAKE_SOURCE_DIR}/src/include
-    ${NCURSES_INCLUDE_DIRS}
-    ${LUA_INCLUDE_DIRS}
-    ${TAGLIB_INCLUDE_DIRS}
-)
-
-# Source files — new directory structure
+# Source files
 set(SOURCES
     src/main.cpp
     src/ui/img_to_ascii.cpp
     src/ui/ui.cpp
     src/util/log.cpp
-    src/util/lua_config.cpp
     src/util/mpd_connections.cpp
     src/util/util.cpp
 )
 
 add_executable(orpheus ${SOURCES})
 
-# miniaudio: header-only, implementation defined in player.cpp only
-set_source_files_properties(src/player/player.cpp PROPERTIES
-    COMPILE_DEFINITIONS "MINIAUDIO_IMPLEMENTATION"
-)
-# STB: same deal, defined in img_to_ascii.cpp only
-set_source_files_properties(src/ui/img_to_ascii.cpp PROPERTIES
-    COMPILE_DEFINITIONS "STB_IMAGE_IMPLEMENTATION"
+# Include directories
+target_include_directories(orpheus PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${NCURSES_INCLUDE_DIRS}
+    ${LUA_INCLUDE_DIRS}
+    ${TAGLIB_INCLUDE_DIRS}
 )
 
 # Link libraries
@@ -62,8 +52,13 @@ target_link_libraries(orpheus PRIVATE
     ${NCURSES_LIBRARIES}
     ${LUA_LIBRARIES}
     ${TAGLIB_LIBRARIES}
-    ncurses
 )
+
+# Header-only lib implementation (defined in img_to_ascii.cpp only)
+set_source_files_properties(src/ui/img_to_ascii.cpp PROPERTIES
+    COMPILE_DEFINITIONS "STB_IMAGE_IMPLEMENTATION"
+)
+
 if(ENABLE_FFMPEG)
     target_include_directories(orpheus PRIVATE
         ${AVCODEC_INCLUDE_DIRS}
@@ -89,10 +84,11 @@ if(ENABLE_TESTS)
 endif()
 
 if(ENABLE_COVERAGE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+    target_compile_options(orpheus PRIVATE --coverage)
+    target_link_options(orpheus PRIVATE --coverage)
 endif()
 
 if(ENABLE_SANITIZERS)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fsanitize=undefined")
+    target_compile_options(orpheus PRIVATE -fsanitize=address -fsanitize=undefined)
+    target_link_options(orpheus PRIVATE -fsanitize=address -fsanitize=undefined)
 endif()

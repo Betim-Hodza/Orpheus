@@ -9,24 +9,29 @@
 #include "../include/ui.hpp"
 #include "../include/util.hpp"
 #include <lauxlib.h>
-#include <lua.h>
 #include <lualib.h>
-#include <mpd/client.h>
 #include <ncurses.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
 // globals
-struct mpd_connection *conn;
 UI ui;
 
-int main() {
+int main()
+{
+
+  // file logging
+  // writing both to the console and stdout
+  FileLogger logger("orpheus_debug.log");
+  std::streambuf *old_cout = std::cout.rdbuf(logger.rdbuf());
 
   // find current music directory
-  Util::debugPrint("Looking for default music dir ~/Music");
+  Util::debugPrint("Looking for music dir: ~/Music");
+  std::filesystem::path music_path = Util::expand_home("~/Music");
 
   Util::debugPrint("Initializing Orpheus");
+
   // init ncurses
   initscr();
   raw();
@@ -34,26 +39,13 @@ int main() {
   noecho();
   curs_set(0);
 
-  log_debug("After init ncurses");
+  Util::debugPrint("Starting TUI up");
 
-  log_debug("Before init ui");
+  UIManager ui_manager;
+  ui_manager.init(music_path.string());
+  ui_manager.run();
 
-  // initialize our ui
-  init_ui(cfg.starting_directory, &ui);
-  free(cfg.starting_directory);
-
-  log_debug("After init ui");
-
-  log_debug("Before run tui");
-
-  // run tui
-  run_tui(conn, &ui);
-
-  // cleanup
-  fclose(logfile);
-  clean_tui(&ui);
-  config_free(&cfg);
-  mpd_connection_free(conn);
+  Util::debugPrint("Cleaning TUI up");
 
   return 0;
 }

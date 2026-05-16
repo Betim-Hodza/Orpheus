@@ -3,13 +3,15 @@
 #include <cstdlib>
 #include <format>
 
-namespace Util {
+namespace Util
+{
 
 /**
  * @brief expands path to home
  * @param read only string
  */
-std::filesystem::path expand_home(std::string_view path) {
+std::filesystem::path expandHome(std::string_view path)
+{
   // early return if no ~
   if (path.empty() || path[0] != `~`)
     return path;
@@ -31,7 +33,8 @@ std::filesystem::path expand_home(std::string_view path) {
  * @brief format total_seconds to a 00:00 clock format string
  * @param total_seconds to be formated as string
  */
-std::string format_duration(int total_seconds) {
+std::string formatDuration(int total_seconds)
+{
   int minutes = total_seconds / 60;
   int seconds = total_seconds % 60;
 
@@ -42,7 +45,8 @@ std::string format_duration(int total_seconds) {
  * @brief Print a debug message (only if HEIMDALL_DEBUG_ENABLED is defined)
  * @param message The message to print
  */
-void debugPrint(const std::string &message) {
+void debugPrint(const std::string &message)
+{
 #ifdef ORPHEUS_DEBUG_ENABLED
   std::cout << "[DEBUG] " << message << std::endl;
 #endif
@@ -53,7 +57,8 @@ void debugPrint(const std::string &message) {
  * defined)
  * @param message The message to print
  */
-void infoPrint(const std::string &message) {
+void infoPrint(const std::string &message)
+{
 #ifdef ORPHEUS_DEBUG_ENABLED
   std::cout << "[INFO] " << message << std::endl;
 #endif
@@ -63,7 +68,8 @@ void infoPrint(const std::string &message) {
  * @brief Print an error message
  * @param message The error message to print
  */
-void errorPrint(const std::string &message) {
+void errorPrint(const std::string &message)
+{
   std::cerr << "[ERROR] " << message << std::endl;
 }
 
@@ -71,7 +77,8 @@ void errorPrint(const std::string &message) {
  * @brief Print a warning message
  * @param message The warning message to print
  */
-void warningPrint(const std::string &message) {
+void warningPrint(const std::string &message)
+{
   std::cerr << "[WARNING] " << message << std::endl;
 }
 

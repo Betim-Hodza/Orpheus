@@ -2,96 +2,100 @@
 #define UI_H
 
 // direct includes
-#include <ncurses.h>
-#include <mpd/client.h>
-#include <mpd/albumart.h>
-#include <mpd/readpicture.h>
-#include <unistd.h>
-#include <errno.h>
 #include <aalib.h>
+#include <errno.h>
 #include <jpeglib.h>
+#include <mpd/albumart.h>
+#include <mpd/client.h>
+#include <mpd/readpicture.h>
+#include <ncurses.h>
+#include <unistd.h>
 // indirect includes
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#include <filesystem>
+#include <string>
+#include <vector>
 
 // macros
 #define MAX_ITEMS 1000
 #define MAX_PATH 256
 #define TAB_COUNT 4
 
-typedef enum
+enum class Tab
 {
-	home,
-	directory,
-	queue,
-	help
-} Tab;
+  home,
+  directory,
+  queue,
+  help
+};
 
-typedef struct 
+enum class ItemType
 {
-	// main windows 
-	WINDOW *header;
-	WINDOW *main_area;
-	WINDOW *footer;
-	WINDOW *directory_selection;
-	WINDOW *queue_area;
-	// quick maths 
-	int max_rows;
-	int max_cols;
-	// directy semi-globals
-	char *current_directory;
-	char *music_root;  // absolute path to MPD music directory root
-	char **item_uris;
-	int *item_types; // 0 for dir, 1 for song
-	int item_count;
-	int selected_index;
-	// turn on and off screens 
-	bool show_directory_browser;
-	bool show_directory_selection;
-	bool show_help;
-	bool show_queue;
-	char input_buffer[MAX_PATH];
-	int input_pos;
-	Tab current_tab;
-	// ascii album art 
-	char **ascii_art;      // 2D array to store ASCII characters
-	int ascii_width;       // Width of ASCII art
-	int ascii_height;      // Height of ASCII art
-	char *cached_image_path; // Track which image is cached
-	// queue scrolling
-	unsigned int total_qsongs;
-	unsigned int queue_ctr;
-} UI;
+  Directory,
+  Song
+};
 
-// initialize the ui after setting up ncurses
-void init_ui(const char *music_root, UI *ui);
-// clean up tui
-void clean_tui(UI *ui);
-// updates time and current tab
-void update_header(UI *ui);
-// browse music dir
-void update_directory_browser(struct mpd_connection *conn, UI *ui);
-// updates directory screen
-void update_directory_selection(UI *ui);
-//help
-void help_screen(UI *ui);
-// show current songs in queue 
-void queue_screen(struct mpd_connection *conn, UI *ui);
-// update main tab with basic info (expand with album art)
-void update_main_area(struct mpd_connection *conn, UI *ui);
-// update footer with fun animation when music plays
-void update_footer(struct mpd_connection *conn, UI *ui);
-// runs whole tui process (Gets called from main)
-void run_tui(struct mpd_connection *conn, UI *ui);
-// get dir up
-char *get_parent_directory(const char *path);
-// display album art
-//void display_ascii_art(UI *ui, const char *image_path);
+struct UI
+{
+  // main windows
+  WINDOW *main_area = nullptr;
+  WINDOW *header = nullptr;
+  WINDOW *footer = nullptr;
+  WINDOW *directory_selection = nullptr;
+  WINDOW *queue_area = nullptr;
 
-// // returns the image to ascii string
-// // along with width and height
-// void image_to_ascii(UI *ui, const char *image_path);
+  // quick maths
+  unsigned int max_rows = 0;
+  unsigned int max_cols = 0;
+
+  // directy semi-globals
+  std::string current_directory;
+  std::string music_root;
+  std::vector<std::string> item_uris;
+  std::vector<ItemType> item_types;
+  int selected_index = 0;
+
+  // turn on and off screens
+  bool show_directory_selection = false;
+  std::string input_buffer;
+  Tab current_tab = home;
+
+  // ascii album art
+  std::vector<std::string> ascii_art;
+  int ascii_width = 0;
+  int ascii_height = 0;
+  std::string cached_image_path;
+
+  // queue scrolling
+  unsigned int total_qsongs = 0;
+  unsigned int queue_ctr = 0;
+};
+
+class UIManager
+{
+public:
+  UIManager();
+  ~UIManager();
+
+  void init(const std::filesystem::path &music_root);
+  void cleanup();
+  void run();
+
+private:
+  UI state;
+
+  void updateHeader();
+  void updateFooter();
+  void updateMainArea();
+  void updateDirectoryBrowser();
+  void updateDirectorySelection();
+  void helpScreen();
+  void queueScreen();
+
+  std::string getParentDirectory(const std::string &path);
+};
 
 #endif

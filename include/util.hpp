@@ -3,18 +3,19 @@
 #include <filesystem>
 #include <string_view>
 
-namespace Util {
+namespace Util
+{
 
 /**
  * @brief expands path to home
  * @param read only string
  */
-std::filesystem::path expand_home(std::string_view path);
+std::filesystem::path expandHome(std::string_view path);
 /**
  * @brief format total_seconds to a 00:00 clock format string
  * @param total_seconds to be formated as string
  */
-std::string format_duration(int total_seconds); // e.g. "3:45"
+std::string formatDuration(int total_seconds); // e.g. "3:45"
 
 /**
  * @brief Print a debug message (only if ORPHEUS_DEBUG_ENABLED is defined)
