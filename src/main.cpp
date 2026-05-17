@@ -16,9 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// globals
-UI ui;
-
 int main()
 {
 

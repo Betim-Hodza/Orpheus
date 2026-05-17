@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <format>
 #include <iostream>
+#include <string>
 
 namespace Util
 {
@@ -28,6 +29,43 @@ std::filesystem::path expandHome(std::string_view path)
 
   // ~/ (2 char size) we want to just join it with the substr
   return std::filesystem::path(home) / path.substr(2);
+}
+
+bool listDir(std::string_view path, std::vector<std::string> &content_list)
+{
+  if (!std::filesystem::exists(path))
+  {
+    errorPrint(std::string("Path does not exists") + std::string(path));
+    return false;
+  }
+
+  if (!std::filesystem::is_directory(path))
+  {
+    errorPrint(std::string("Path is not a directory") + std::string(path));
+    return false;
+  }
+
+  try
+  {
+    for (const auto &entry : std::filesystem::directory_iterator(path))
+    {
+      if (entry.is_regular_file())
+      {
+        content_list.push_back(entry.path().filename().string());
+      }
+      else
+      {
+        content_list.push_back(entry.path().filename().string() + "/");
+      }
+    }
+  }
+  catch (const std::filesystem::filesystem_error &ex)
+  {
+    errorPrint(std::string("Filesystem error") + ex.what());
+    return false;
+  }
+
+  return true;
 }
 
 /**

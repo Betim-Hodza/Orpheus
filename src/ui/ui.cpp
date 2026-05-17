@@ -72,7 +72,7 @@ void UIManager::init(const std::filesystem::path &music_root)
   }
 
   state.music_root = music_root.string();
-  state.current_directory = "";
+  state.current_directory = music_root.string();
   state.current_tab = Tab::home;
 
   Util::debugPrint("UI initialized successfully");
@@ -200,12 +200,22 @@ void UIManager::updateDirectoryBrowser()
   werase(state.main_area);
   box(state.main_area, 0, 0);
   mvwprintw(state.main_area, 1, 2, "Directory: %s", state.current_directory.c_str());
-  mvwprintw(state.main_area, 2, 2, "Directory browser - coming soon");
 
   // read the state.current dir / states music path / root
+  std::vector<std::string> content_list;
+
+  // err msg inside listDir func
+  if (!Util::listDir(state.current_directory, content_list))
+  {
+    return;
+  }
+
   // get all the items in the directory (directories and files)
-  // we should only show directories and music files and sub out other files
-  // print it all to the screen
+  for (size_t i = 0; i < content_list.size(); i++)
+  {
+    mvwprintw(state.main_area, i + 3, 2, content_list[i].c_str());
+  }
+  // selection of current file / directory ?
   // go up and down a directory with enter (down), esq (up)
 
   wrefresh(state.main_area);

@@ -2,6 +2,7 @@
 #pragma once
 #include <filesystem>
 #include <string_view>
+#include <vector>
 
 namespace Util
 {
@@ -11,6 +12,11 @@ namespace Util
  * @param read only string
  */
 std::filesystem::path expandHome(std::string_view path);
+/**
+ * @brief returns path string of directory and song
+ * @param read only string of the path
+ */
+bool listDir(std::string_view path, std::vector<std::string> &content_list);
 /**
  * @brief format total_seconds to a 00:00 clock format string
  * @param total_seconds to be formated as string
