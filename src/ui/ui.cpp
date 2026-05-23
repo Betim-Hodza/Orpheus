@@ -1,6 +1,6 @@
-#include "../../include/ui.hpp"
-#include "../../include/log.hpp"
-#include "../../include/util.hpp"
+#include "ui.hpp"
+#include "log.hpp"
+#include "util.hpp"
 #include <ctime>
 #include <iomanip>
 #include <ncurses.h>
@@ -37,11 +37,11 @@ void UIManager::cleanup()
 std::string UIManager::getParentDirectory(const std::string &path)
 {
   if (path.empty())
-    return "";
+    return "/home/bay/Music";
 
   size_t last_slash = path.find_last_of('/');
   if (last_slash == std::string::npos)
-    return "";
+    return "/home/bay/Music";
 
   return path.substr(0, last_slash);
 }
@@ -108,18 +108,6 @@ void UIManager::updateHeader()
 }
 
 /* *
- * @brief updates to directory selection screen
- * */
-void UIManager::updateDirectorySelection()
-{
-  werase(state.directory_selection);
-  box(state.directory_selection, 0, 0);
-  mvwprintw(state.directory_selection, 1, 2, "Music directory: %s", state.input_buffer.c_str());
-  mvwprintw(state.directory_selection, 1, state.max_cols - 30, "[Enter to save, Esc to cancel]");
-  wrefresh(state.directory_selection);
-}
-
-/* *
  * @brief updates to help screen
  * */
 void UIManager::helpScreen()
@@ -154,32 +142,19 @@ void UIManager::queueScreen()
 
   Util::debugPrint("Impl largely incomplete");
 
-  // get status from our future playlist feature in our program
-  // if (!status)
-  //{
-  //	Util::printError("Failed to get status in queue_screen");
-  //	mvwprintw(state.main_area, 2, 2, "Failed to get status");
-  //	wrefresh(state.main_area);
-  //	return;
-  //}
-
-  // state.total_qsongs = getQueueLength(status);
-  // for now we'll use 0 as a placeholder
-  state.total_qsongs = 0;
-  if (state.total_qsongs == 0)
-  {
-    mvwprintw(state.main_area, 2, 2, "Queue empty");
-    wrefresh(state.main_area);
-    return;
-  }
-
-  unsigned start, end;
-  start = state.queue_ctr % state.total_qsongs;
-  end = start + (unsigned)(state.max_rows - 3);
-  if (end > state.total_qsongs)
-    end = state.total_qsongs;
-
-  // get q list range or smthing from our own code later
+  //  if (state.song_queue.size() == 0)
+  //  {
+  //    Util::debugPrint("Queue is currently empty");
+  //    mvwprintw(state.main_area, 2, 2, "Queue empty");
+  //    wrefresh(state.main_area);
+  //    return;
+  //  }
+  //
+  //  unsigned start, end;
+  //  start = state.queue_ctr % state.song_queue.size();
+  //  end = start + (unsigned)(state.max_rows - 3);
+  //  if (end > state.total_qsongs)
+  //    end = state.total_qsongs;
 
   // print out each song given
   // TITLE, ARTIST,
@@ -201,23 +176,35 @@ void UIManager::updateDirectoryBrowser()
   box(state.main_area, 0, 0);
   mvwprintw(state.main_area, 1, 2, "Directory: %s", state.current_directory.c_str());
 
-  // read the state.current dir / states music path / root
-  std::vector<std::string> content_list;
-
   // err msg inside listDir func
-  if (!Util::listDir(state.current_directory, content_list))
+  if (!Util::listDir(state.current_directory, state.item_uris, state.item_types))
   {
+    Util::errorPrint("Can't get directory listing");
     return;
   }
 
-  // get all the items in the directory (directories and files)
-  for (size_t i = 0; i < content_list.size(); i++)
+  // print out all the items
+  for (size_t i = 0; i < state.item_uris.size(); i++)
   {
-    mvwprintw(state.main_area, i + 3, 2, content_list[i].c_str());
-  }
-  // selection of current file / directory ?
-  // go up and down a directory with enter (down), esq (up)
+    // don't print too many items
+    if (i + 3 >= getmaxy(state.main_area))
+      break;
 
+    // print out the sleected one with highlighting
+    if (state.selected_index == i)
+    {
+      wattron(state.main_area, A_REVERSE | A_BOLD);
+      mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
+      wattroff(state.main_area, A_REVERSE | A_BOLD);
+    }
+    else
+    {
+      wattroff(state.main_area, A_REVERSE);
+      mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
+    }
+  }
+
+  mvwprintw(state.main_area, 1, state.max_cols - 30, "[Enter to save, Esc to cancel]");
   wrefresh(state.main_area);
 }
 
@@ -274,7 +261,8 @@ void UIManager::run()
 {
   Util::debugPrint("Starting TUI event loop");
   int ch;
-  timeout(500);
+  timeout(50);
+  nodelay(stdscr, true);
 
   while ((ch = getch()) != 'q')
   {
@@ -315,42 +303,44 @@ void UIManager::run()
         state.current_directory = getParentDirectory(state.current_directory);
         state.selected_index = 0;
         break;
-      }
-    }
+      case '\n':
+        // select subdir or song
+        if (state.item_types[state.selected_index] == ItemType::Directory)
+        {
+          // append dir to curr dir, we go \/ by 1
+          state.current_directory.append("/" + state.item_uris[state.selected_index]);
+          state.current_directory.pop_back(); // we want to remove the / at the end of it so when user does ESC to go up
+                                              // they don't need to do it twice
+          state.selected_index = 0;
+          // Util::debugPrint("updating current directory to: " + state.current_directory);
+        }
+        else
+        {
+          // add this song to the queue
+          std::string song_path = state.current_directory + state.item_uris[state.selected_index];
 
-    // directory selection inout
-    if (state.show_directory_selection)
-    {
-      if (ch == '\n')
-      {
-        state.current_directory = state.input_buffer;
-        state.show_directory_selection = false;
-      }
-      else if (ch == 27) // ESC
-      {
-        state.input_buffer = state.current_directory;
-        state.show_directory_selection = false;
-      }
-      else if (ch == KEY_BACKSPACE && !state.input_buffer.empty())
-      {
-        state.input_buffer.pop_back();
-      }
-      else if (ch >= 32 && ch <= 126)
-      {
-        state.input_buffer += static_cast<char>(ch);
+          // get the metadata of the song here
+          struct SongMetadata song = {state.item_uris[state.selected_index], "Artist name", song_path,
+                                      "ablum image path"};
+
+          state.song_queue.push_back(song);
+          // Util::debugPrint("Adding song to end of state.song_queue: " + state.item_uris[state.selected_index]);
+        }
+
+        break;
       }
     }
 
     // queue scroll
     if (state.current_tab == Tab::queue)
     {
-      if (ch == KEY_UP && state.total_qsongs > 0)
+      if (ch == KEY_UP && state.song_queue.size() > 0)
       {
-        state.queue_ctr = (state.queue_ctr + state.total_qsongs - 1) % state.total_qsongs;
+        state.queue_ctr = (state.queue_ctr + state.song_queue.size() - 1) % state.song_queue.size();
       }
-      else if (ch == KEY_DOWN && state.total_qsongs > 0)
+      else if (ch == KEY_DOWN && state.song_queue.size() > 0)
       {
-        state.queue_ctr = (state.queue_ctr + 1) % state.total_qsongs;
+        state.queue_ctr = (state.queue_ctr + 1) % state.song_queue.size();
       }
     }
 

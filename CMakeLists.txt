@@ -33,6 +33,7 @@ set(SOURCES
     src/ui/ui.cpp
     src/util/log.cpp
     src/util/util.cpp
+		src/util/miniaudio.c
 )
 
 add_executable(orpheus ${SOURCES})

@@ -1,6 +1,6 @@
 // log.cpp
-#include "../../include/log.hpp"
-#include "../../include/util.hpp"
+#include "log.hpp"
+#include "util.hpp"
 #include <fstream>
 #include <iostream>
 

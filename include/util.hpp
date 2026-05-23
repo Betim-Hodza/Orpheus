@@ -1,5 +1,6 @@
 // util.hpp
 #pragma once
+#include "ui.hpp"
 #include <filesystem>
 #include <string_view>
 #include <vector>
@@ -16,7 +17,7 @@ std::filesystem::path expandHome(std::string_view path);
  * @brief returns path string of directory and song
  * @param read only string of the path
  */
-bool listDir(std::string_view path, std::vector<std::string> &content_list);
+bool listDir(std::string_view path, std::vector<std::string> &content_list, std::vector<ItemType> &content_items);
 /**
  * @brief format total_seconds to a 00:00 clock format string
  * @param total_seconds to be formated as string

@@ -5,9 +5,9 @@
 // * note: want to create config file in lua, will learn how to do so
 // * support both unix socket and loopback network connections
 
-#include "../include/log.hpp"
-#include "../include/ui.hpp"
-#include "../include/util.hpp"
+#include "log.hpp"
+#include "ui.hpp"
+#include "util.hpp"
 #include <iostream>
 #include <lauxlib.h>
 #include <lualib.h>
@@ -32,6 +32,7 @@ int main()
 
   // init ncurses
   initscr();
+  set_escdelay(0); // we don't want to delay pressing esc for user
   raw();
   keypad(stdscr, TRUE);
   noecho();

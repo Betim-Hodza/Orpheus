@@ -38,6 +38,14 @@ enum class ItemType
   Song
 };
 
+struct SongMetadata
+{
+  std::string song_name;
+  std::string artist_name;
+  std::string song_path;
+  std::string album_image_path;
+};
+
 struct UI
 {
   // main windows
@@ -56,11 +64,10 @@ struct UI
   std::string music_root;
   std::vector<std::string> item_uris;
   std::vector<ItemType> item_types;
+  std::vector<SongMetadata> song_queue;
   int selected_index = 0;
 
   // turn on and off screens
-  bool show_directory_selection = false;
-  std::string input_buffer;
   Tab current_tab = Tab::home;
 
   // ascii album art
@@ -70,7 +77,6 @@ struct UI
   std::string cached_image_path;
 
   // queue scrolling
-  unsigned int total_qsongs = 0;
   unsigned int queue_ctr = 0;
 };
 
@@ -91,7 +97,6 @@ private:
   void updateFooter();
   void updateMainArea();
   void updateDirectoryBrowser();
-  void updateDirectorySelection();
   void helpScreen();
   void queueScreen();
 

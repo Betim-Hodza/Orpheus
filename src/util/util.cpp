@@ -1,5 +1,5 @@
 // util.cpp
-#include "../../include/util.hpp"
+#include "util.hpp"
 #include <cstdlib>
 #include <format>
 #include <iostream>
@@ -31,7 +31,7 @@ std::filesystem::path expandHome(std::string_view path)
   return std::filesystem::path(home) / path.substr(2);
 }
 
-bool listDir(std::string_view path, std::vector<std::string> &content_list)
+bool listDir(std::string_view path, std::vector<std::string> &content_list, std::vector<ItemType> &content_items)
 {
   if (!std::filesystem::exists(path))
   {
@@ -47,14 +47,19 @@ bool listDir(std::string_view path, std::vector<std::string> &content_list)
 
   try
   {
+    // clear all lists
+    content_list.clear();
+    content_items.clear();
     for (const auto &entry : std::filesystem::directory_iterator(path))
     {
       if (entry.is_regular_file())
       {
+        content_items.push_back(ItemType::Song);
         content_list.push_back(entry.path().filename().string());
       }
       else
       {
+        content_items.push_back(ItemType::Directory);
         content_list.push_back(entry.path().filename().string() + "/");
       }
     }
@@ -86,9 +91,7 @@ std::string formatDuration(int total_seconds)
  */
 void debugPrint(const std::string &message)
 {
-#ifdef ORPHEUS_DEBUG_ENABLED
   std::cout << "[DEBUG] " << message << std::endl;
-#endif
 }
 
 /**
@@ -98,9 +101,7 @@ void debugPrint(const std::string &message)
  */
 void infoPrint(const std::string &message)
 {
-#ifdef ORPHEUS_DEBUG_ENABLED
   std::cout << "[INFO] " << message << std::endl;
-#endif
 }
 
 /**
