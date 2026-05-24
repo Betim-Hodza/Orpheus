@@ -4,6 +4,8 @@ project(orpheus VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
@@ -16,16 +18,16 @@ option(ENABLE_FFMPEG "Enable FFmpeg for AAC/ALAC/M4A support" OFF)
 # Find dependencies
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NCURSES REQUIRED ncurses)
-pkg_check_modules(LUA REQUIRED lua)
 pkg_check_modules(TAGLIB REQUIRED taglib)
+#pkg_check_modules(LUA REQUIRED lua)
 
 # Optional FFmpeg for AAC/ALAC/M4A
-if(ENABLE_FFMPEG)
-    pkg_check_modules(AVCODEC REQUIRED libavcodec)
-    pkg_check_modules(AVFORMAT REQUIRED libavformat)
-    pkg_check_modules(AVUTIL REQUIRED libavutil)
-    add_compile_definitions(ORPHEUS_FFMPEG)
-endif()
+#if(ENABLE_FFMPEG)
+#    pkg_check_modules(AVCODEC REQUIRED libavcodec)
+#    pkg_check_modules(AVFORMAT REQUIRED libavformat)
+#    pkg_check_modules(AVUTIL REQUIRED libavutil)
+#    add_compile_definitions(ORPHEUS_FFMPEG)
+#endif()
 
 # Source files
 set(SOURCES

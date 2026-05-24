@@ -6,6 +6,7 @@
 // * support both unix socket and loopback network connections
 
 #include "log.hpp"
+#include "miniaudio.h"
 #include "ui.hpp"
 #include "util.hpp"
 #include <iostream>
@@ -14,11 +15,9 @@
 #include <ncurses.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <string.h>
 
 int main()
 {
-
   // file logging
   // writing both to the console and stdout
   FileLogger logger("orpheus_debug.log");
@@ -28,7 +27,7 @@ int main()
   Util::debugPrint("Looking for music dir: ~/Music");
   std::filesystem::path music_path = Util::expandHome("~/Music");
 
-  Util::debugPrint("Initializing Orpheus");
+  Util::debugPrint("Initializing ncurses");
 
   // init ncurses
   initscr();
@@ -37,6 +36,8 @@ int main()
   keypad(stdscr, TRUE);
   noecho();
   curs_set(0);
+
+  Util::debugPrint("init miniaudio");
 
   Util::debugPrint("Starting TUI up");
 

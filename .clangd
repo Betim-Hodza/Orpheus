@@ -1,0 +1,9 @@
+CompileFlags:
+  Add:
+    - "-Iinclude"
+    - "-std=c++20"      # Change to c++17 / c++23 if needed
+    - "-Wall"
+    - "-Wextra"
+
+Diagnostics:
+  UnusedIncludes: Strict

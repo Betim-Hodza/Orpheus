@@ -1,5 +1,4 @@
 #include "ui.hpp"
-#include "log.hpp"
 #include "util.hpp"
 #include <ctime>
 #include <iomanip>
