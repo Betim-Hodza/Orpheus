@@ -2,9 +2,7 @@
 #define UI_H
 
 // direct includes
-#include <aalib.h>
 #include <errno.h>
-#include <jpeglib.h>
 #include <mpd/albumart.h>
 #include <mpd/client.h>
 #include <mpd/readpicture.h>
@@ -86,13 +84,13 @@ public:
   UIManager();
   ~UIManager();
 
+  // external methods
   void init(const std::filesystem::path &music_root);
   void cleanup();
   void run();
 
-private:
+  // internal methods
   UI state;
-
   void updateHeader();
   void updateFooter();
   void updateMainArea();
