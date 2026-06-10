@@ -3,9 +3,6 @@
 
 // direct includes
 #include <errno.h>
-#include <mpd/albumart.h>
-#include <mpd/client.h>
-#include <mpd/readpicture.h>
 #include <ncurses.h>
 #include <unistd.h>
 // indirect includes

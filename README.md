@@ -16,12 +16,22 @@ A Terminal User Interface (TUI) music player that processes Music Files (MP3, M4
 
 On Debian/Ubuntu:
 ```bash
-sudo apt-get install taglib libncurses5-dev liblua5.3-dev libjpeg-turbo build-essential cmake pkg-config 
-
+sudo apt-get install taglib libncurses5-dev liblua5.3-dev libjpeg-turbo-progs build-essential cmake pkg-config
 ```
+
 On Fedora:
 ```bash
-sudo dnf install libmpdclient-devel ncurses-devel lua-devel libjpeg-turbo gcc cmake pkgconf
+sudo dnf install taglib-devel ncurses-devel lua-devel libjpeg-turbo-devel gcc cmake pkgconf
+```
+
+On Arch Linux:
+```bash
+sudo pacman -S taglib ncurses lua libjpeg-turbo gcc cmake pkg-config
+```
+
+On macOS (Homebrew):
+```bash
+brew install taglib ncurses lua libjpeg-turbo cmake pkg-config
 ```
 
 ### Building
