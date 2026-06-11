@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(orpheus VERSION 1.0 LANGUAGES CXX)
+project(orpheus VERSION 1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,9 +33,10 @@ pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua)
 set(SOURCES
     src/main.cpp
     src/ui/ui.cpp
+    src/player/player.cpp
     src/util/log.cpp
     src/util/util.cpp
-		src/util/miniaudio.c
+    src/util/miniaudio.c
 )
 
 add_executable(orpheus ${SOURCES})

@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "player.hpp"
+
 // macros
 #define MAX_ITEMS 1000
 #define MAX_PATH 256
@@ -31,14 +33,6 @@ enum class ItemType
 {
   Directory,
   Song
-};
-
-struct SongMetadata
-{
-  std::string song_name;
-  std::string artist_name;
-  std::string song_path;
-  std::string album_image_path;
 };
 
 struct UI
@@ -59,7 +53,6 @@ struct UI
   std::string music_root;
   std::vector<std::string> item_uris;
   std::vector<ItemType> item_types;
-  std::vector<SongMetadata> song_queue;
   int selected_index = 0;
 
   // turn on and off screens
@@ -73,6 +66,9 @@ struct UI
 
   // queue scrolling
   unsigned int queue_ctr = 0;
+
+  // audio player
+  MiniAudioPlayer player;
 };
 
 class UIManager

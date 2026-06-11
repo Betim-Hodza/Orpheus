@@ -1,4 +1,5 @@
 #include "ui.hpp"
+#include "player.hpp"
 #include "util.hpp"
 #include <ctime>
 #include <iomanip>
@@ -74,6 +75,8 @@ void UIManager::init(const std::filesystem::path &music_root)
   state.current_directory = music_root.string();
   state.current_tab = Tab::home;
 
+  state.player.init();
+
   Util::debugPrint("UI initialized successfully");
 }
 
@@ -129,9 +132,6 @@ void UIManager::helpScreen()
 
 /* *
  * @brief updates to song queue screen
- *
- * @note for now we're going to leave out the mpd connection stuff
- * impl is largely incomplete
  * */
 void UIManager::queueScreen()
 {
@@ -139,24 +139,38 @@ void UIManager::queueScreen()
   box(state.main_area, 0, 0);
   mvwprintw(state.main_area, 1, 2, "Queue / Playlist:");
 
-  Util::debugPrint("Impl largely incomplete");
+  size_t qsize = state.player.getQueueSize();
+  if (qsize == 0)
+  {
+    mvwprintw(state.main_area, 2, 2, "Queue empty");
+    wrefresh(state.main_area);
+    return;
+  }
 
-  //  if (state.song_queue.size() == 0)
-  //  {
-  //    Util::debugPrint("Queue is currently empty");
-  //    mvwprintw(state.main_area, 2, 2, "Queue empty");
-  //    wrefresh(state.main_area);
-  //    return;
-  //  }
-  //
-  //  unsigned start, end;
-  //  start = state.queue_ctr % state.song_queue.size();
-  //  end = start + (unsigned)(state.max_rows - 3);
-  //  if (end > state.total_qsongs)
-  //    end = state.total_qsongs;
+  unsigned start, end;
+  start = state.queue_ctr % qsize;
+  end = start + (unsigned)(state.max_rows - 3);
+  if (end > qsize)
+	{
+    end = qsize;
+	}
 
-  // print out each song given
-  // TITLE, ARTIST,
+  int current_idx = state.player.getCurrentIndex();
+  for (unsigned i = start; i < end; i++)
+  {
+    auto* song = state.player.getQueueSong(i);
+    std::string label = song ? song->song_name : "[unknown]";
+    if ((int)i == current_idx)
+    {
+      wattron(state.main_area, A_REVERSE);
+      mvwprintw(state.main_area, i - start + 3, 2, "> %s", label.c_str());
+      wattroff(state.main_area, A_REVERSE);
+    }
+    else
+    {
+      mvwprintw(state.main_area, i - start + 3, 2, "  %s", label.c_str());
+    }
+  }
 
   wrefresh(state.main_area);
 }
@@ -189,7 +203,7 @@ void UIManager::updateDirectoryBrowser()
     if (i + 3 >= getmaxy(state.main_area))
       break;
 
-    // print out the sleected one with highlighting
+    // print out the selected one with highlighting
     if (state.selected_index == i)
     {
       wattron(state.main_area, A_REVERSE | A_BOLD);
@@ -215,10 +229,16 @@ void UIManager::updateFooter()
 {
   werase(state.footer);
   box(state.footer, 0, 0);
-  mvwprintw(state.footer, 1, 2, "Ready");
 
-  // draw some animation inside this box that goes in a circle
-  // on play / pause, show current time playing in the song and total song len
+  auto* current = state.player.getCurrentSong();
+  if (current != nullptr)
+  {
+    mvwprintw(state.footer, 1, 2, "Now Playing: %s - %s", current->artist_name.c_str(), current->song_name.c_str());
+  }
+  else
+  {
+    mvwprintw(state.footer, 1, 2, "Ready");
+  }
 
   wrefresh(state.footer);
 }
@@ -246,7 +266,16 @@ void UIManager::updateMainArea()
     werase(state.main_area);
     box(state.main_area, 0, 0);
     mvwprintw(state.main_area, 1, 2, "Orpheus - C++ Music Player");
-    mvwprintw(state.main_area, 2, 2, "No Track Playing");
+    if (state.player.getCurrentSong() != nullptr)
+    {
+      auto* current = state.player.getCurrentSong();
+      mvwprintw(state.main_area, 2, 2, "Now Playing: %s", current->song_name.c_str());
+      mvwprintw(state.main_area, 3, 2, "Artist: %s", current->artist_name.c_str());
+    }
+    else
+    {
+      mvwprintw(state.main_area, 2, 2, "No Track Playing");
+    }
     wrefresh(state.main_area);
     break;
   }
@@ -266,66 +295,91 @@ void UIManager::run()
   while ((ch = getch()) != 'q')
   {
     // tab switching
-    if (ch == KEY_LEFT)
+    if (ch == KEY_LEFT || ch == 'h')
     {
       int current = static_cast<int>(state.current_tab);
       current = (current == 0) ? 3 : current - 1;
       state.current_tab = static_cast<Tab>(current);
     }
-    if (ch == KEY_RIGHT)
+    if (ch == KEY_RIGHT || ch == 'l')
     {
       int current = static_cast<int>(state.current_tab);
       current = (current == 3) ? 0 : current + 1;
       state.current_tab = static_cast<Tab>(current);
     }
 
-    // Music controls to be implemented later
-    // if (ch == 'p') // play / pause
-    // if (ch == ']') // skip forwards
-    // if (ch == '[') // skip back
-    // if (ch == KEY_BACKSPACE) // clear queue
+    // Music controls
+    if (ch == 'p' || ch == 'P')
+    {
+      state.player.pauseSong();
+    }
+    if (ch == ']')
+    {
+      state.player.nextSong();
+    }
+    if (ch == '[')
+    {
+      state.player.prevSong();
+    }
+    if (ch == KEY_BACKSPACE)
+    {
+      state.player.clearQueue();
+    }
 
     // directory browser input
     if (state.current_tab == Tab::directory)
     {
       switch (ch)
       {
+			case 'k':
       case KEY_UP:
         if (state.selected_index > 0)
-          state.selected_index--;
+				{
+         state.selected_index--;
+				}
         break;
-      case KEY_DOWN:
+			case 'j':
+			case KEY_DOWN:
         if (state.selected_index < static_cast<int>(state.item_uris.size()) - 1)
+				{
           state.selected_index++;
+				}
         break;
       case 27: // ESC
         state.current_directory = getParentDirectory(state.current_directory);
         state.selected_index = 0;
         break;
       case '\n':
+
         // select subdir or song
-        if (state.item_types[state.selected_index] == ItemType::Directory)
+        if (state.selected_index >= 0 && (size_t)state.selected_index < state.item_uris.size())
         {
-          // append dir to curr dir, we go \/ by 1
-          state.current_directory.append("/" + state.item_uris[state.selected_index]);
-          state.current_directory.pop_back(); // we want to remove the / at the end of it so when user does ESC to go up
-                                              // they don't need to do it twice
-          state.selected_index = 0;
-          // Util::debugPrint("updating current directory to: " + state.current_directory);
+          if (state.item_types[state.selected_index] == ItemType::Directory)
+          {
+            // append dir to curr dir, we go down by 1
+            state.current_directory.append("/" + state.item_uris[state.selected_index]);
+            state.current_directory.pop_back(); // remove trailing /
+            state.selected_index = 0;
+          }
+          else
+          {
+            // add this song to the queue
+            SongMetadata song;
+            song.song_name = state.item_uris[state.selected_index];
+            song.artist_name = "Artist name";
+            song.song_path = state.current_directory + "/" + state.item_uris[state.selected_index];
+            song.album_image_path = "album image path";
+
+            bool was_empty = state.player.isEmpty();
+            state.player.queueSong(song);
+
+            // If this is the first song, start playing it immediately
+            if (was_empty)
+            {
+              state.player.nextSong();
+            }
+          }
         }
-        else
-        {
-          // add this song to the queue
-          std::string song_path = state.current_directory + state.item_uris[state.selected_index];
-
-          // get the metadata of the song here
-          struct SongMetadata song = {state.item_uris[state.selected_index], "Artist name", song_path,
-                                      "ablum image path"};
-
-          state.song_queue.push_back(song);
-          // Util::debugPrint("Adding song to end of state.song_queue: " + state.item_uris[state.selected_index]);
-        }
-
         break;
       }
     }
@@ -333,14 +387,22 @@ void UIManager::run()
     // queue scroll
     if (state.current_tab == Tab::queue)
     {
-      if (ch == KEY_UP && state.song_queue.size() > 0)
+      size_t qsize = state.player.getQueueSize();
+      if (ch == KEY_UP && qsize > 0)
       {
-        state.queue_ctr = (state.queue_ctr + state.song_queue.size() - 1) % state.song_queue.size();
+        state.queue_ctr = (state.queue_ctr + qsize - 1) % qsize;
       }
-      else if (ch == KEY_DOWN && state.song_queue.size() > 0)
+      else if (ch == KEY_DOWN && qsize > 0)
       {
-        state.queue_ctr = (state.queue_ctr + 1) % state.song_queue.size();
+        state.queue_ctr = (state.queue_ctr + 1) % qsize;
       }
+    }
+
+    // Auto-advance: if current song ended, play the next one
+    if (state.player.isCurrentEnded())
+    {
+      Util::debugPrint("Song ended, advancing to next");
+      state.player.nextSong();
     }
 
     updateHeader();
@@ -349,4 +411,5 @@ void UIManager::run()
   }
 
   Util::debugPrint("User has quit TUI");
+	return;
 }
