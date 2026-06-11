@@ -86,27 +86,32 @@ void UIManager::init(const std::filesystem::path &music_root)
 void UIManager::updateHeader()
 {
   auto now = std::time(nullptr);
-  auto *tm = std::localtime(&now);
-  std::ostringstream oss;
-  oss << std::put_time(tm, "%I:%M:%S");
-  std::string time_str = oss.str();
+	if (now != state.last_header_clock_update || state.current_tab != state.last_tab)
+	{
+		state.last_header_clock_update = now;
+		state.last_tab = state.current_tab;
+		auto *tm = std::localtime(&now);
+		std::ostringstream oss;
+		oss << std::put_time(tm, "%I:%M:%S");
+		std::string time_str = oss.str();
 
-  werase(state.header);
-  box(state.header, 0, 0);
-  mvwprintw(state.header, 1, 2, "Time: %s", time_str.c_str());
+		werase(state.header);
+		box(state.header, 0, 0);
+		mvwprintw(state.header, 1, 2, "Time: %s", time_str.c_str());
 
-  std::vector<std::string> tab_names = {"Home", "Directory", "Queue", "Help"};
-  int x_pos = 2;
-  for (int i = 0; i < TAB_COUNT; i++)
-  {
-    if (static_cast<Tab>(i) == state.current_tab)
-      wattron(state.header, A_REVERSE);
-    mvwprintw(state.header, 2, x_pos, " %s ", tab_names[i].c_str());
-    if (static_cast<Tab>(i) == state.current_tab)
-      wattroff(state.header, A_REVERSE);
-    x_pos += tab_names[i].length() + 3;
-  }
-  wrefresh(state.header);
+		std::vector<std::string> tab_names = {"Home", "Directory", "Queue", "Help"};
+		int x_pos = 2;
+		for (int i = 0; i < TAB_COUNT; i++)
+		{
+			if (static_cast<Tab>(i) == state.current_tab)
+				wattron(state.header, A_REVERSE);
+			mvwprintw(state.header, 2, x_pos, " %s ", tab_names[i].c_str());
+			if (static_cast<Tab>(i) == state.current_tab)
+				wattroff(state.header, A_REVERSE);
+			x_pos += tab_names[i].length() + 3;
+		}
+		wrefresh(state.header);
+	}
 }
 
 /* *
@@ -189,36 +194,42 @@ void UIManager::updateDirectoryBrowser()
   box(state.main_area, 0, 0);
   mvwprintw(state.main_area, 1, 2, "Directory: %s", state.current_directory.c_str());
 
-  // err msg inside listDir func
-  if (!Util::listDir(state.current_directory, state.item_uris, state.item_types))
-  {
-    Util::errorPrint("Can't get directory listing");
-    return;
-  }
+	// only update when we change directories
+	if (state.current_directory != state.last_listed_directory || state.current_tab == Tab::directory)
+	{
+		// err msg inside listDir func
+		if (!Util::listDir(state.current_directory, state.item_uris, state.item_types))
+		{
+			Util::errorPrint("Can't get directory listing");
+			return;
+		}
+		state.last_listed_directory = state.current_directory;
 
-  // print out all the items
-  for (size_t i = 0; i < state.item_uris.size(); i++)
-  {
-    // don't print too many items
-    if (i + 3 >= getmaxy(state.main_area))
-      break;
+		// print out all the items
+		for (size_t i = 0; i < state.item_uris.size(); i++)
+		{
+			// don't print too many items
+			if (i + 3 >= getmaxy(state.main_area))
+				break;
 
-    // print out the selected one with highlighting
-    if (state.selected_index == i)
-    {
-      wattron(state.main_area, A_REVERSE | A_BOLD);
-      mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
-      wattroff(state.main_area, A_REVERSE | A_BOLD);
-    }
-    else
-    {
-      wattroff(state.main_area, A_REVERSE);
-      mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
-    }
-  }
+			// print out the selected one with highlighting
+			if (state.selected_index == i)
+			{
+				wattron(state.main_area, A_REVERSE | A_BOLD);
+				mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
+				wattroff(state.main_area, A_REVERSE | A_BOLD);
+			}
+			else
+			{
+				wattroff(state.main_area, A_REVERSE);
+				mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
+			}
+		}
 
-  mvwprintw(state.main_area, 1, state.max_cols - 30, "[Enter to save, Esc to cancel]");
-  wrefresh(state.main_area);
+		mvwprintw(state.main_area, 1, state.max_cols - 30, "[Enter to save, Esc to cancel]");
+		wrefresh(state.main_area);
+
+	}
 }
 
 /* *
@@ -289,11 +300,11 @@ void UIManager::run()
 {
   Util::debugPrint("Starting TUI event loop");
   int ch;
-  timeout(50);
   nodelay(stdscr, true);
 
   while ((ch = getch()) != 'q')
   {
+		napms(5); // sleep 16ms 
     // tab switching
     if (ch == KEY_LEFT || ch == 'h')
     {
@@ -363,21 +374,31 @@ void UIManager::run()
           }
           else
           {
-            // add this song to the queue
-            SongMetadata song;
-            song.song_name = state.item_uris[state.selected_index];
-            song.artist_name = "Artist name";
-            song.song_path = state.current_directory + "/" + state.item_uris[state.selected_index];
-            song.album_image_path = "album image path";
+						// check if it ends with any applicable formats 
+						std::string song_file = state.item_uris[state.selected_index];
+						if (song_file.ends_with(".mp3") || song_file.ends_with(".flac") || song_file.ends_with(".wav"))
+						{
+							// add this song to the queue
+							SongMetadata song;
+							song.song_name = state.item_uris[state.selected_index];
+							song.artist_name = "Artist name";
+							song.song_path = state.current_directory + "/" + state.item_uris[state.selected_index];
+							song.album_image_path = "album image path";
 
-            bool was_empty = state.player.isEmpty();
-            state.player.queueSong(song);
+							bool was_empty = state.player.isEmpty();
+							state.player.queueSong(song);
 
-            // If this is the first song, start playing it immediately
-            if (was_empty)
-            {
-              state.player.nextSong();
-            }
+							// If this is the first song, start playing it immediately
+							if (was_empty)
+							{
+								state.player.nextSong();
+							}
+						}
+						else
+						{
+							// not a valid file
+							mvwprintw(state.main_area, 10, 2, "Not a supported music file");
+						}
           }
         }
         break;
