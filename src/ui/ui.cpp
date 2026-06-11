@@ -380,10 +380,29 @@ void UIManager::run()
 						{
 							// add this song to the queue
 							SongMetadata song;
-							song.song_name = state.item_uris[state.selected_index];
-							song.artist_name = "Artist name";
 							song.song_path = state.current_directory + "/" + state.item_uris[state.selected_index];
-							song.album_image_path = "album image path";
+
+							// ask taglib to process artist name and image
+							TagLib::FileRef f(song.song_path.c_str());
+
+							song.song_name = std::string(f.tag()->title().toCString());
+							song.artist_name = std::string(f.tag()->artist().toCString());
+
+							// try to get image embedded in TagLib
+							//auto pictures = f.tag()->complexProperties("PICTURE");
+							//if (pictures.isEmpty())
+							//{
+							//	// resolve image manually
+							//	song.album_image_path = Art::ResolveImage(song.song_path);
+							//	Art::ProcessingImagePath(song.cached_image, song.album_image_path);
+							//}
+							//else
+							//{
+							//	// resolve with the TagLib image
+							//	Art::ProcessingImageTag(song.cached_image, pictures[i]);
+							//}
+
+							song.album_image_path = "unknown";
 
 							bool was_empty = state.player.isEmpty();
 							state.player.queueSong(song);

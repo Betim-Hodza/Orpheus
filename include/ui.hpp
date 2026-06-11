@@ -5,7 +5,6 @@
 #include <errno.h>
 #include <ncurses.h>
 #include <unistd.h>
-// indirect includes
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -14,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include <taglib/fileref.h>
+#include "art.hpp"
 #include "player.hpp"
 
 // macros
@@ -62,10 +63,10 @@ struct UI
 	Tab last_tab = Tab::home;
 
   // ascii album art
-  std::vector<std::string> ascii_art;
-  int ascii_width = 0;
-  int ascii_height = 0;
-  std::string cached_image_path;
+	ColorMode art_color_mode = ColorMode::ANSI_256;
+	ImageData cached_image;
+	AsciiCanvas current_art;
+	std::string cached_song_path;
 
   // queue scrolling
   unsigned int queue_ctr = 0;
