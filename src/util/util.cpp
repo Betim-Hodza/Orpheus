@@ -4,6 +4,8 @@
 #include <format>
 #include <iostream>
 #include <string>
+#include <numeric>
+#include <algorithm>
 
 namespace Util
 {
@@ -63,6 +65,30 @@ bool listDir(std::string_view path, std::vector<std::string> &content_list, std:
         content_list.push_back(entry.path().filename().string() + "/");
       }
     }
+
+		// sort alphabetically (use iota to enumerate)
+		std::vector<size_t> indices(content_list.size());
+		std::iota(indices.begin(), indices.end(), 0);
+
+		// O(N log(n) L) L = string comparison, std::sort is N Log(N)
+		std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) {
+			return content_list[a] < content_list[b];
+		});
+		
+		std::vector<std::string> sorted_list(content_list.size());
+		std::vector<ItemType> sorted_item(content_items.size());
+
+		// place known list of dir in a sorted fashion using indices iota
+		for (size_t i = 0; i < indices.size(); ++i)
+		{
+			sorted_list[i] = content_list[indices[i]];
+			sorted_item[i] = content_items[indices[i]];
+		}
+
+		// reassign both vectors with the sorted version
+		content_list = sorted_list;
+		content_items = sorted_item;
+
   }
   catch (const std::filesystem::filesystem_error &ex)
   {
