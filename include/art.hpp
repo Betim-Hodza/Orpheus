@@ -1,55 +1,84 @@
 // art.hpp ascii art
 #pragma once
+#include <cstdint>
 #include <string>
+#include <vector>
 
-#include "ui.hpp"
-
-enum class ColorMode 
+namespace Art
 {
-	GRAYSCALE,
-	ANSI_256,
-	TRUECOLOR
+
+enum class ColorMode
+{
+  GRAYSCALE,
+  ANSI_256
 };
 
-struct ImageData 
+struct ImageData
 {
-	// RGBA data
-	std::vector<unsigned char> pixels;
-	int width = 0; 
-	int height = 0; 
-	int channels = 0;
+  // RGBA data
+  std::vector<unsigned char> pixels;
+  int width = 0;
+  int height = 0;
+  int channels = 0;
 };
 
-struct AsciiCell 
+struct AsciiCell
 {
-	wchar_t ch;
-  // ANSI index or extended color index
-	int fg; 
-	int bg;
+  wchar_t ch;
+  int fg; // ANSI index, extended color pair, or grayscale index
+  int bg;
 };
 
-struct AsciiCanvas 
+struct AsciiCanvas
 {
-	int width = 0;
-	int height = 0;
+  int width = 0;
+  int height = 0;
+  ColorMode mode;
+  std::vector<AsciiCell> cells;
 };
 
-/* *
- * @brief ResolveImage path for a song (when taglib doesnt work)
- * @param song_path 
- * */
-std::string ResolveImage(std::string song_path);
+/**
+ * @brief Resolve image path for a song when embedded art is not available.
+ *  Checks for cover.jpg, cover.png, front.jpg, front.png, album.jpg, album.png
+ *  in the same directory as the song.
+ * @param song_path Full path to the song file.
+ * @return Path to the cover image, or "no image" if none found.
+ */
+std::string ResolveImage(const std::string &song_path);
 
-/* *
- * @brief get image data from path
- * @param cached_image where we'll store the data
- * @param album_image_path where the image is
- * */
-void ProccessingImagePath(ImageData cached_image, std::string album_image_path);
+/**
+ * @brief Load image data from a file path into ImageData.
+ * @param[out] out  ImageData to populate.
+ * @param[in]  path Filesystem path to the image.
+ */
+bool LoadImageFile(ImageData &out, const std::string &path);
 
-/* *
- * @brief get image data from TagLib complex PICTURE
- * @param cached_image where we'll store the data
- * @param pictureMap 
- * */
-void ProccessingImageTag(ImageData cached_image, const TagLib::VariantMap& pictureMap);
+/**
+ * @brief Load image data from a memory buffer.
+ * @param[out] out    ImageData to populate.
+ * @param[in]  data   Raw bytes.
+ * @param[in]  length Number of bytes.
+ */
+bool LoadImageMemory(ImageData &out, const uint8_t *data, size_t length);
+
+/**
+ * @brief Generate an ASCII canvas from raw image pixels.
+ *
+ * @param image    Source image data (RGBA).
+ * @param mode     Rendering mode (grayscale, ANSI-256, or truecolor).
+ * @param max_cols Maximum columns available in the terminal pane.
+ * @param max_rows Maximum rows available in the terminal pane.
+ * @return Populated AsciiCanvas ready for ncurses rendering.
+ */
+AsciiCanvas Generate(const ImageData &image, ColorMode mode, int max_cols,
+                     int max_rows);
+
+/**
+ * @brief Get a single pixel's RGB from ImageData at (x, y).
+ * @return Packed 24-bit RGB value (0xRRGGBB).
+ */
+uint32_t GetPixelRGB(const ImageData &img, int x, int y);
+
+int RGBToANSI256(uint32_t rgb);
+
+} // namespace Art

@@ -88,6 +88,13 @@ bool MiniAudioPlayer::isCurrentEnded()
   return false;
 }
 
+bool MiniAudioPlayer::isAtEnd() const
+{
+  if (!audio_state.sound_is_initialized)
+    return false;
+  return ma_sound_at_end(&audio_state.sound) != 0;
+}
+
 bool MiniAudioPlayer::startSong(const std::string& song_path)
 {
   stopCurrent();
@@ -278,4 +285,54 @@ const SongMetadata* MiniAudioPlayer::getQueueSong(unsigned int index) const
 	}
 
   return &song_queue[index];
+}
+
+int MiniAudioPlayer::getCurrentPositionSeconds() const
+{
+  if (current_index < 0 || !audio_state.sound_is_initialized)
+  {
+    return 0;
+  }
+
+  ma_uint64 cursor = 0;
+  if (ma_sound_get_cursor_in_pcm_frames(&audio_state.sound, &cursor) != MA_SUCCESS)
+  {
+    return 0;
+  }
+
+  ma_uint32 sr = ma_engine_get_sample_rate(&audio_state.engine);
+  if (sr == 0)
+  {
+    return 0;
+  }
+
+  return static_cast<int>(cursor / sr);
+}
+
+int MiniAudioPlayer::getSongLengthSeconds() const
+{
+  if (song_length_pcm <= 0)
+  {
+    return 0;
+  }
+
+  ma_uint32 sr = ma_engine_get_sample_rate(&audio_state.engine);
+  if (sr == 0)
+  {
+    return 0;
+  }
+
+  return static_cast<int>(song_length_pcm / sr);
+}
+
+int MiniAudioPlayer::getProgressPercent() const
+{
+  int total = getSongLengthSeconds();
+  if (total <= 0)
+  {
+    return 0;
+  }
+
+  int pos = getCurrentPositionSeconds();
+  return (pos * 100) / total;
 }

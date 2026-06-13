@@ -11,6 +11,7 @@
 #include "util.hpp"
 #include <iostream>
 #include <lauxlib.h>
+#include <locale.h>
 #include <lualib.h>
 #include <ncurses.h>
 #include <stdbool.h>
@@ -30,6 +31,7 @@ int main()
   Util::debugPrint("Initializing ncurses");
 
   // init ncurses
+	setlocale(LC_ALL, "");
   initscr();
   set_escdelay(0); // we don't want to delay pressing esc for user
   raw();

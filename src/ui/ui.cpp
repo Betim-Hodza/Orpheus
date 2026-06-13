@@ -3,8 +3,92 @@
 #include "util.hpp"
 #include <ctime>
 #include <iomanip>
+#include <map>
 #include <ncurses.h>
 #include <sstream>
+#include <utility>
+
+// cache for ANSI-256 / grayscale color pairs
+static std::map<std::pair<int, int>, int> g_color_pair_cache;
+static int g_next_pair_id = 1;
+
+// grayscale density 0-9 mapped to ANSI-256 gray pallete indices
+static const int GRAYSCALE_ANSI_MAP[10] = { 236, 238, 240, 242, 244, 246, 248, 250, 253, 255};
+
+/* *
+ * @brief get or create a COLOR_PAIR id for (fg, bg) 
+ * fg and bg are ncurses color numbers 
+ *
+ * @param fg
+ * @param bg
+ * */
+static int getColorPair(int fg, int bg)
+{
+	auto key = std::make_pair(fg, bg);
+	auto it = g_color_pair_cache.find(key);
+	if (it != g_color_pair_cache.end())
+	{
+		return it->second;
+	}
+
+	int pair_id = g_next_pair_id++;
+	init_pair(pair_id, fg, bg);
+	g_color_pair_cache[key] = pair_id;
+	return pair_id;
+}
+
+/* *
+ * @brief Render one AsciiCell to ncurses window
+ * */
+static void drawCell(WINDOW *win, int y, int x, const Art::AsciiCell &cell, Art::ColorMode mode)
+{
+	int fg = cell.fg;
+	int bg = cell.bg;
+	int pair_id = 0;
+
+	switch (mode)
+	{
+		case Art::ColorMode::GRAYSCALE:
+			{
+				// map density indices to actual ANSI gray color
+				int ansi_fg = GRAYSCALE_ANSI_MAP[fg];
+				int ansi_bg = GRAYSCALE_ANSI_MAP[bg];
+				pair_id = getColorPair(ansi_fg, ansi_bg);
+				break;
+			}
+		case Art::ColorMode::ANSI_256:
+			{
+				pair_id = getColorPair(fg, bg);
+				break;
+			}
+	}
+
+	// draw the half-block char with the color pair
+	cchar_t cc;
+	setcchar(&cc, &cell.ch, 0, pair_id, nullptr);
+	mvwadd_wch(win, y, x, &cc);
+}
+
+/* *
+ * @brief Draw an AsciiCanvas at the specified window coordinates.
+ * */
+static void drawAsciiArt(WINDOW *win, int start_y, int start_x, const Art::AsciiCanvas &art)
+{
+	if (art.cells.empty() || art.width == 0 || art.height == 0)
+	{
+		return;
+	}
+
+	for (int y = 0; y < art.height; ++y)
+	{
+		for (int x = 0; x < art.width; ++x)
+		{
+			const auto &cell = art.cells[y * art.width + x];
+			drawCell(win, start_y + y, start_x + x, cell, art.mode);
+		}
+	}
+}
+
 
 UIManager::UIManager()
 {
@@ -74,6 +158,9 @@ void UIManager::init(const std::filesystem::path &music_root)
   state.music_root = music_root.string();
   state.current_directory = music_root.string();
   state.current_tab = Tab::home;
+
+  start_color();
+  use_default_colors();
 
   state.player.init();
 
@@ -276,19 +363,79 @@ void UIManager::updateMainArea()
   default:
     werase(state.main_area);
     box(state.main_area, 0, 0);
-    mvwprintw(state.main_area, 1, 2, "Orpheus - C++ Music Player");
-    if (state.player.getCurrentSong() != nullptr)
-    {
-      auto* current = state.player.getCurrentSong();
-      mvwprintw(state.main_area, 2, 2, "Now Playing: %s", current->song_name.c_str());
-      mvwprintw(state.main_area, 3, 2, "Artist: %s", current->artist_name.c_str());
-    }
-    else
-    {
-      mvwprintw(state.main_area, 2, 2, "No Track Playing");
-    }
-    wrefresh(state.main_area);
-    break;
+
+		// left side album art
+		int album_width = (state.max_cols / 2) - 2;
+		int album_height = state.max_rows - 7; 
+
+		auto *current = state.player.getCurrentSong();
+		if (current != nullptr)
+		{
+			// update album art ?
+			if (state.cached_song_path != current->song_path)
+			{
+				state.cached_song_path = current->song_path;
+
+				if (!current->cached_image.pixels.empty())
+				{
+					state.current_art = Art::Generate(current->cached_image, state.art_color_mode, album_width, album_height);
+				}
+				else
+				{
+					// no image
+					state.current_art = Art::AsciiCanvas();
+				}
+			}
+
+			// Draw the art
+			if (!state.current_art.cells.empty())
+			{
+				int album_y_offset = 1 + (album_height - state.current_art.height) / 2;
+				if (album_y_offset < 1)
+				{
+					album_y_offset = 1;
+				}
+				drawAsciiArt(state.main_area, album_y_offset, 2, state.current_art);
+			}
+			else
+			{
+				mvwprintw(state.main_area, 2, 2, "[no cover art]");
+			}
+
+			// right side, song info
+			int info_x = album_width + 4;
+			int info_y = 2;
+
+			mvwprintw(state.main_area, info_y, info_x, "Now Playing:");
+			mvwprintw(state.main_area, info_y + 1, info_x, "%s", current->song_name.c_str());
+			mvwprintw(state.main_area, info_y + 3, info_x, "Artist");
+			mvwprintw(state.main_area, info_y + 4, info_x, "%s", current->artist_name.c_str());
+
+			// progress bar
+			int pos = state.player.getCurrentPositionSeconds();
+			int total = state.player.getSongLengthSeconds();
+			int percent = state.player.getProgressPercent();
+
+			int bar_width = state.max_cols - info_x - 4;
+			int filled = (bar_width * percent) / 100;
+
+			std::string bar;
+			for (int i = 0; i < bar_width; ++i)
+			{
+				bar += (i < filled) ? "█" : "░";
+			}
+
+			mvwprintw(state.main_area, info_y + 7, info_x, "%s", bar.c_str());
+			mvwprintw(state.main_area, info_y + 8, info_x, "%s / %s", Util::formatDuration(pos).c_str(), Util::formatDuration(total).c_str());
+
+		}
+		else
+		{
+			mvwprintw(state.main_area, 2, 2, "No Track Playing");
+		}
+
+		wrefresh(state.main_area);
+		break;
   }
 }
 
@@ -336,6 +483,21 @@ void UIManager::run()
     {
       state.player.clearQueue();
     }
+
+		if (ch == 'a' || ch == 'A')
+		{
+			switch (state.art_color_mode)
+			{
+				case Art::ColorMode::ANSI_256:
+					state.art_color_mode = Art::ColorMode::GRAYSCALE;
+					break;
+				case Art::ColorMode::GRAYSCALE:
+					state.art_color_mode = Art::ColorMode::ANSI_256;
+					break;
+			}
+			// force art regen on next frame
+			state.cached_song_path.clear();
+		}
 
     // directory browser input
     if (state.current_tab == Tab::directory)
@@ -388,19 +550,28 @@ void UIManager::run()
 							song.song_name = std::string(f.tag()->title().toCString());
 							song.artist_name = std::string(f.tag()->artist().toCString());
 
-							// try to get image embedded in TagLib
-							//auto pictures = f.tag()->complexProperties("PICTURE");
-							//if (pictures.isEmpty())
-							//{
-							//	// resolve image manually
-							//	song.album_image_path = Art::ResolveImage(song.song_path);
-							//	Art::ProcessingImagePath(song.cached_image, song.album_image_path);
-							//}
-							//else
-							//{
-							//	// resolve with the TagLib image
-							//	Art::ProcessingImageTag(song.cached_image, pictures[i]);
-							//}
+						// try to get image embedded in TagLib
+						auto pictures = f.tag()->complexProperties("PICTURE");
+						if (!pictures.isEmpty())
+						{
+							// extract the first picture
+							auto &pic = pictures.front();
+							auto it = pic.find("data");
+							if (it != pic.end() && it->second.type() == TagLib::Variant::ByteVector)
+							{
+								TagLib::ByteVector bv = it->second.value<TagLib::ByteVector>();
+								Art::LoadImageMemory(song.cached_image, reinterpret_cast<const uint8_t *>(bv.data()), bv.size());
+							}
+						}
+						else
+						{
+							// resolve with external cover image in path
+							song.album_image_path = Art::ResolveImage(song.song_path);
+							if (song.album_image_path != "no image")
+							{
+								Art::LoadImageFile(song.cached_image, song.album_image_path);
+							}
+						}
 
 							song.album_image_path = "unknown";
 
@@ -439,7 +610,7 @@ void UIManager::run()
     }
 
     // Auto-advance: if current song ended, play the next one
-    if (state.player.isCurrentEnded())
+    if (state.player.isCurrentEnded() || state.player.isAtEnd())
     {
       Util::debugPrint("Song ended, advancing to next");
       state.player.nextSong();
@@ -453,3 +624,4 @@ void UIManager::run()
   Util::debugPrint("User has quit TUI");
 	return;
 }
+

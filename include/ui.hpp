@@ -13,7 +13,6 @@
 #include <string>
 #include <vector>
 
-#include <taglib/fileref.h>
 #include "art.hpp"
 #include "player.hpp"
 
@@ -49,10 +48,10 @@ struct UI
   unsigned int max_rows = 0;
   unsigned int max_cols = 0;
 
-  // directy semi-globals
-	time_t last_header_clock_update = 0;
+  // directory semi-globals
+  time_t last_header_clock_update = 0;
   std::string current_directory;
-	std::string last_listed_directory;
+  std::string last_listed_directory;
   std::string music_root;
   std::vector<std::string> item_uris;
   std::vector<ItemType> item_types;
@@ -60,13 +59,13 @@ struct UI
 
   // turn on and off screens
   Tab current_tab = Tab::home;
-	Tab last_tab = Tab::home;
+  Tab last_tab = Tab::home;
 
   // ascii album art
-	ColorMode art_color_mode = ColorMode::ANSI_256;
-	ImageData cached_image;
-	AsciiCanvas current_art;
-	std::string cached_song_path;
+  Art::ColorMode art_color_mode = Art::ColorMode::ANSI_256;
+  Art::ImageData cached_image;
+  Art::AsciiCanvas current_art;
+  std::string cached_song_path;
 
   // queue scrolling
   unsigned int queue_ctr = 0;

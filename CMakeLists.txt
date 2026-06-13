@@ -15,9 +15,17 @@ option(ENABLE_COVERAGE "Enable code coverage" OFF)
 option(ENABLE_SANITIZERS "Enable sanitizers for debugging" OFF)
 option(ENABLE_FFMPEG "Enable FFmpeg for AAC/ALAC/M4A support" OFF)
 
+if(APPLE)
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/ncurses")
+    set(ENV{PKG_CONFIG_PATH} "/opt/homebrew/opt/ncurses/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+endif()
+
 # Find dependencies
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(NCURSES REQUIRED IMPORTED_TARGET ncurses)
+pkg_check_modules(NCURSES REQUIRED IMPORTED_TARGET ncursesw)
+if(NOT NCURSES_FOUND)
+    pkg_check_modules(NCURSES REQUIRED IMPORTED_TARGET ncurses)
+endif()
 pkg_check_modules(TAGLIB REQUIRED IMPORTED_TARGET taglib)
 pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua)
 
@@ -33,6 +41,7 @@ pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua)
 set(SOURCES
     src/main.cpp
     src/ui/ui.cpp
+		src/ui/art.cpp
     src/player/player.cpp
     src/util/log.cpp
     src/util/util.cpp
