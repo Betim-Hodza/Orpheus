@@ -210,15 +210,16 @@ void UIManager::helpScreen()
   box(state.main_area, 0, 0);
 
   mvwprintw(state.main_area, 1, 2, "Main Help:");
-  mvwprintw(state.main_area, 2, 2, "P              | Play/Pause");
-  mvwprintw(state.main_area, 3, 2, "'[' ']'        | Prev song, Next song");
-  mvwprintw(state.main_area, 4, 2, "<LEFT> <RIGHT> | Move to tabs left or right (cycles)");
-  mvwprintw(state.main_area, 5, 2, "<BACKSPACE>    | Clear song queue");
+  mvwprintw(state.main_area, 2, 2, "P                     | Play/Pause");
+  mvwprintw(state.main_area, 3, 2, "'[' ']'               | Prev song, Next song");
+  mvwprintw(state.main_area, 4, 2, "<LEFT> <RIGHT> 'H' 'L'| Move to tabs left or right (cycles)");
+  mvwprintw(state.main_area, 5, 2, "<BACKSPACE>           | Clear song queue");
+  mvwprintw(state.main_area, 6, 2, "'A'                   | Cycle GRAYSCALE / ANSI for Album art");
 
-  mvwprintw(state.main_area, 7, 2, "Directory Help:");
-  mvwprintw(state.main_area, 8, 2, "<UP> <DOWN>    | Scrolls up and down a list");
-  mvwprintw(state.main_area, 9, 2, "<ESC>          | Goes up a directory");
-  mvwprintw(state.main_area, 10, 2, "<ENTER>        | Goes down a directory and adds song to queue");
+  mvwprintw(state.main_area, 8, 2, "Directory Help:");
+  mvwprintw(state.main_area, 9, 2, "<UP> <DOWN> 'K' 'J'   | Scrolls up and down a list");
+  mvwprintw(state.main_area, 10, 2, "<ESC> '-'             | Goes up a directory");
+  mvwprintw(state.main_area, 11, 2,"<ENTER>               | Goes down a directory and adds song to queue");
   wrefresh(state.main_area);
 }
 
@@ -519,6 +520,7 @@ void UIManager::run()
 				}
         break;
       case 27: // ESC
+			case '-':
         state.current_directory = getParentDirectory(state.current_directory);
         state.selected_index = 0;
         break;
