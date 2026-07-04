@@ -13,6 +13,12 @@ enum class ColorMode
   ANSI_256
 };
 
+enum class RenderMode
+{
+  BLOCK,
+  DETAILED
+};
+
 struct ImageData
 {
   // RGBA data
@@ -65,13 +71,13 @@ bool LoadImageMemory(ImageData &out, const uint8_t *data, size_t length);
  * @brief Generate an ASCII canvas from raw image pixels.
  *
  * @param image    Source image data (RGBA).
- * @param mode     Rendering mode (grayscale, ANSI-256, or truecolor).
+ * @param mode     color mode (grayscale, or ANSI-256).
+ * @param rmode    Rendering mode (block or detailed).
  * @param max_cols Maximum columns available in the terminal pane.
  * @param max_rows Maximum rows available in the terminal pane.
  * @return Populated AsciiCanvas ready for ncurses rendering.
  */
-AsciiCanvas Generate(const ImageData &image, ColorMode mode, int max_cols,
-                     int max_rows);
+AsciiCanvas Generate(const ImageData &image, ColorMode mode, RenderMode rmode, int max_cols, int max_rows);
 
 /**
  * @brief Get a single pixel's RGB from ImageData at (x, y).
@@ -80,5 +86,7 @@ AsciiCanvas Generate(const ImageData &image, ColorMode mode, int max_cols,
 uint32_t GetPixelRGB(const ImageData &img, int x, int y);
 
 int RGBToANSI256(uint32_t rgb);
+
+char MapRGBToChar(uint32_t rgb);
 
 } // namespace Art

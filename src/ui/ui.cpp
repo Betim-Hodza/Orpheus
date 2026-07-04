@@ -1,4 +1,5 @@
 #include "ui.hpp"
+#include "art.hpp"
 #include "player.hpp"
 #include "util.hpp"
 #include <ctime>
@@ -16,8 +17,8 @@ static int g_next_pair_id = 1;
 static const int GRAYSCALE_ANSI_MAP[10] = { 236, 238, 240, 242, 244, 246, 248, 250, 253, 255};
 
 /* *
- * @brief get or create a COLOR_PAIR id for (fg, bg) 
- * fg and bg are ncurses color numbers 
+ * @brief get or create a COLOR_PAIR id for (fg, bg)
+ * fg and bg are ncurses color numbers
  *
  * @param fg
  * @param bg
@@ -211,15 +212,15 @@ void UIManager::helpScreen()
 
   mvwprintw(state.main_area, 1, 2, "Main Help:");
   mvwprintw(state.main_area, 2, 2, "P                     | Play/Pause");
-  mvwprintw(state.main_area, 3, 2, "'[' ']'               | Prev song, Next song");
   mvwprintw(state.main_area, 4, 2, "<LEFT> <RIGHT> 'H' 'L'| Move to tabs left or right (cycles)");
   mvwprintw(state.main_area, 5, 2, "<BACKSPACE>           | Clear song queue");
   mvwprintw(state.main_area, 6, 2, "'A'                   | Cycle GRAYSCALE / ANSI for Album art");
+  mvwprintw(state.main_area, 7, 2, "'Z'                   | Cycle BLOCK / DETAILED mode for Album art");
 
-  mvwprintw(state.main_area, 8, 2, "Directory Help:");
-  mvwprintw(state.main_area, 9, 2, "<UP> <DOWN> 'K' 'J'   | Scrolls up and down a list");
-  mvwprintw(state.main_area, 10, 2, "<ESC> '-'             | Goes up a directory");
-  mvwprintw(state.main_area, 11, 2,"<ENTER>               | Goes down a directory and adds song to queue");
+  mvwprintw(state.main_area, 9, 2, "Directory Help:");
+  mvwprintw(state.main_area, 10, 2, "<UP> <DOWN> 'K' 'J'   | Scrolls up and down a list");
+  mvwprintw(state.main_area, 11, 2, "<ESC> '-'             | Goes up a directory");
+  mvwprintw(state.main_area, 12, 2,"<ENTER>               | Goes down a directory and adds song to queue");
   wrefresh(state.main_area);
 }
 
@@ -367,7 +368,7 @@ void UIManager::updateMainArea()
 
 		// left side album art
 		int album_width = (state.max_cols / 2) - 2;
-		int album_height = state.max_rows - 7; 
+		int album_height = state.max_rows - 7;
 
 		auto *current = state.player.getCurrentSong();
 		if (current != nullptr)
@@ -379,7 +380,7 @@ void UIManager::updateMainArea()
 
 				if (!current->cached_image.pixels.empty())
 				{
-					state.current_art = Art::Generate(current->cached_image, state.art_color_mode, album_width, album_height);
+					state.current_art = Art::Generate(current->cached_image, state.art_color_mode, state.art_render_mode, album_width, album_height);
 				}
 				else
 				{
@@ -452,7 +453,7 @@ void UIManager::run()
 
   while ((ch = getch()) != 'q')
   {
-		napms(5); // sleep 16ms 
+		napms(5); // sleep 16ms
     // tab switching
     if (ch == KEY_LEFT || ch == 'h')
     {
@@ -500,6 +501,21 @@ void UIManager::run()
 			state.cached_song_path.clear();
 		}
 
+		if (ch == 'z' || ch == 'Z')
+		{
+			switch (state.art_render_mode)
+			{
+				case Art::RenderMode::BLOCK:
+					state.art_render_mode = Art::RenderMode::DETAILED;
+					break;
+				case Art::RenderMode::DETAILED:
+				  state.art_render_mode = Art::RenderMode::BLOCK;
+					break;
+			}
+			// force art regen on next frame
+			state.cached_song_path.clear();
+		}
+
     // directory browser input
     if (state.current_tab == Tab::directory)
     {
@@ -538,7 +554,7 @@ void UIManager::run()
           }
           else
           {
-						// check if it ends with any applicable formats 
+						// check if it ends with any applicable formats
 						std::string song_file = state.item_uris[state.selected_index];
 						if (song_file.ends_with(".mp3") || song_file.ends_with(".flac") || song_file.ends_with(".wav"))
 						{
@@ -626,4 +642,3 @@ void UIManager::run()
   Util::debugPrint("User has quit TUI");
 	return;
 }
-

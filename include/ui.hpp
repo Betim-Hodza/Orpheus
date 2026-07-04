@@ -63,6 +63,7 @@ struct UI
 
   // ascii album art
   Art::ColorMode art_color_mode = Art::ColorMode::ANSI_256;
+  Art::RenderMode art_render_mode = Art::RenderMode::BLOCK;
   Art::ImageData cached_image;
   Art::AsciiCanvas current_art;
   std::string cached_song_path;
