@@ -14,7 +14,7 @@ static std::map<std::pair<int, int>, int> g_color_pair_cache;
 static int g_next_pair_id = 1;
 
 // grayscale density 0-9 mapped to ANSI-256 gray pallete indices
-static const int GRAYSCALE_ANSI_MAP[10] = { 236, 238, 240, 242, 244, 246, 248, 250, 253, 255};
+static const int GRAYSCALE_ANSI_MAP[10] = {236, 238, 240, 242, 244, 246, 248, 250, 253, 255};
 
 /* *
  * @brief get or create a COLOR_PAIR id for (fg, bg)
@@ -25,17 +25,17 @@ static const int GRAYSCALE_ANSI_MAP[10] = { 236, 238, 240, 242, 244, 246, 248, 2
  * */
 static int getColorPair(int fg, int bg)
 {
-	auto key = std::make_pair(fg, bg);
-	auto it = g_color_pair_cache.find(key);
-	if (it != g_color_pair_cache.end())
-	{
-		return it->second;
-	}
+  auto key = std::make_pair(fg, bg);
+  auto it = g_color_pair_cache.find(key);
+  if (it != g_color_pair_cache.end())
+  {
+    return it->second;
+  }
 
-	int pair_id = g_next_pair_id++;
-	init_pair(pair_id, fg, bg);
-	g_color_pair_cache[key] = pair_id;
-	return pair_id;
+  int pair_id = g_next_pair_id++;
+  init_pair(pair_id, fg, bg);
+  g_color_pair_cache[key] = pair_id;
+  return pair_id;
 }
 
 /* *
@@ -43,31 +43,29 @@ static int getColorPair(int fg, int bg)
  * */
 static void drawCell(WINDOW *win, int y, int x, const Art::AsciiCell &cell, Art::ColorMode mode)
 {
-	int fg = cell.fg;
-	int bg = cell.bg;
-	int pair_id = 0;
+  int fg = cell.fg;
+  int bg = cell.bg;
+  int pair_id = 0;
 
-	switch (mode)
-	{
-		case Art::ColorMode::GRAYSCALE:
-			{
-				// map density indices to actual ANSI gray color
-				int ansi_fg = GRAYSCALE_ANSI_MAP[fg];
-				int ansi_bg = GRAYSCALE_ANSI_MAP[bg];
-				pair_id = getColorPair(ansi_fg, ansi_bg);
-				break;
-			}
-		case Art::ColorMode::ANSI_256:
-			{
-				pair_id = getColorPair(fg, bg);
-				break;
-			}
-	}
+  switch (mode)
+  {
+  case Art::ColorMode::GRAYSCALE: {
+    // map density indices to actual ANSI gray color
+    int ansi_fg = GRAYSCALE_ANSI_MAP[fg];
+    int ansi_bg = GRAYSCALE_ANSI_MAP[bg];
+    pair_id = getColorPair(ansi_fg, ansi_bg);
+    break;
+  }
+  case Art::ColorMode::ANSI_256: {
+    pair_id = getColorPair(fg, bg);
+    break;
+  }
+  }
 
-	// draw the half-block char with the color pair
-	cchar_t cc;
-	setcchar(&cc, &cell.ch, 0, pair_id, nullptr);
-	mvwadd_wch(win, y, x, &cc);
+  // draw the half-block char with the color pair
+  cchar_t cc;
+  setcchar(&cc, &cell.ch, 0, pair_id, nullptr);
+  mvwadd_wch(win, y, x, &cc);
 }
 
 /* *
@@ -75,21 +73,20 @@ static void drawCell(WINDOW *win, int y, int x, const Art::AsciiCell &cell, Art:
  * */
 static void drawAsciiArt(WINDOW *win, int start_y, int start_x, const Art::AsciiCanvas &art)
 {
-	if (art.cells.empty() || art.width == 0 || art.height == 0)
-	{
-		return;
-	}
+  if (art.cells.empty() || art.width == 0 || art.height == 0)
+  {
+    return;
+  }
 
-	for (int y = 0; y < art.height; ++y)
-	{
-		for (int x = 0; x < art.width; ++x)
-		{
-			const auto &cell = art.cells[y * art.width + x];
-			drawCell(win, start_y + y, start_x + x, cell, art.mode);
-		}
-	}
+  for (int y = 0; y < art.height; ++y)
+  {
+    for (int x = 0; x < art.width; ++x)
+    {
+      const auto &cell = art.cells[y * art.width + x];
+      drawCell(win, start_y + y, start_x + x, cell, art.mode);
+    }
+  }
 }
-
 
 UIManager::UIManager()
 {
@@ -174,32 +171,32 @@ void UIManager::init(const std::filesystem::path &music_root)
 void UIManager::updateHeader()
 {
   auto now = std::time(nullptr);
-	if (now != state.last_header_clock_update || state.current_tab != state.last_tab)
-	{
-		state.last_header_clock_update = now;
-		state.last_tab = state.current_tab;
-		auto *tm = std::localtime(&now);
-		std::ostringstream oss;
-		oss << std::put_time(tm, "%I:%M:%S");
-		std::string time_str = oss.str();
+  if (now != state.last_header_clock_update || state.current_tab != state.last_tab)
+  {
+    state.last_header_clock_update = now;
+    state.last_tab = state.current_tab;
+    auto *tm = std::localtime(&now);
+    std::ostringstream oss;
+    oss << std::put_time(tm, "%I:%M:%S");
+    std::string time_str = oss.str();
 
-		werase(state.header);
-		box(state.header, 0, 0);
-		mvwprintw(state.header, 1, 2, "Time: %s", time_str.c_str());
+    werase(state.header);
+    box(state.header, 0, 0);
+    mvwprintw(state.header, 1, 2, "Time: %s", time_str.c_str());
 
-		std::vector<std::string> tab_names = {"Home", "Directory", "Queue", "Help"};
-		int x_pos = 2;
-		for (int i = 0; i < TAB_COUNT; i++)
-		{
-			if (static_cast<Tab>(i) == state.current_tab)
-				wattron(state.header, A_REVERSE);
-			mvwprintw(state.header, 2, x_pos, " %s ", tab_names[i].c_str());
-			if (static_cast<Tab>(i) == state.current_tab)
-				wattroff(state.header, A_REVERSE);
-			x_pos += tab_names[i].length() + 3;
-		}
-		wrefresh(state.header);
-	}
+    std::vector<std::string> tab_names = {"Home", "Directory", "Queue", "Help"};
+    int x_pos = 2;
+    for (int i = 0; i < TAB_COUNT; i++)
+    {
+      if (static_cast<Tab>(i) == state.current_tab)
+        wattron(state.header, A_REVERSE);
+      mvwprintw(state.header, 2, x_pos, " %s ", tab_names[i].c_str());
+      if (static_cast<Tab>(i) == state.current_tab)
+        wattroff(state.header, A_REVERSE);
+      x_pos += tab_names[i].length() + 3;
+    }
+    wrefresh(state.header);
+  }
 }
 
 /* *
@@ -220,7 +217,7 @@ void UIManager::helpScreen()
   mvwprintw(state.main_area, 9, 2, "Directory Help:");
   mvwprintw(state.main_area, 10, 2, "<UP> <DOWN> 'K' 'J'   | Scrolls up and down a list");
   mvwprintw(state.main_area, 11, 2, "<ESC> '-'             | Goes up a directory");
-  mvwprintw(state.main_area, 12, 2,"<ENTER>               | Goes down a directory and adds song to queue");
+  mvwprintw(state.main_area, 12, 2, "<ENTER>               | Goes down a directory and adds song to queue");
   wrefresh(state.main_area);
 }
 
@@ -245,14 +242,14 @@ void UIManager::queueScreen()
   start = state.queue_ctr % qsize;
   end = start + (unsigned)(state.max_rows - 3);
   if (end > qsize)
-	{
+  {
     end = qsize;
-	}
+  }
 
   int current_idx = state.player.getCurrentIndex();
   for (unsigned i = start; i < end; i++)
   {
-    auto* song = state.player.getQueueSong(i);
+    auto *song = state.player.getQueueSong(i);
     std::string label = song ? song->song_name : "[unknown]";
     if ((int)i == current_idx)
     {
@@ -283,42 +280,41 @@ void UIManager::updateDirectoryBrowser()
   box(state.main_area, 0, 0);
   mvwprintw(state.main_area, 1, 2, "Directory: %s", state.current_directory.c_str());
 
-	// only update when we change directories
-	if (state.current_directory != state.last_listed_directory || state.current_tab == Tab::directory)
-	{
-		// err msg inside listDir func
-		if (!Util::listDir(state.current_directory, state.item_uris, state.item_types))
-		{
-			Util::errorPrint("Can't get directory listing");
-			return;
-		}
-		state.last_listed_directory = state.current_directory;
+  // only update when we change directories
+  if (state.current_directory != state.last_listed_directory || state.current_tab == Tab::directory)
+  {
+    // err msg inside listDir func
+    if (!Util::listDir(state.current_directory, state.item_uris, state.item_types))
+    {
+      Util::errorPrint("Can't get directory listing");
+      return;
+    }
+    state.last_listed_directory = state.current_directory;
 
-		// print out all the items
-		for (size_t i = 0; i < state.item_uris.size(); i++)
-		{
-			// don't print too many items
-			if (i + 3 >= getmaxy(state.main_area))
-				break;
+    // print out all the items
+    for (size_t i = 0; i < state.item_uris.size(); i++)
+    {
+      // don't print too many items
+      if (static_cast<int>(i) + 3 >= getmaxy(state.main_area))
+        break;
 
-			// print out the selected one with highlighting
-			if (state.selected_index == i)
-			{
-				wattron(state.main_area, A_REVERSE | A_BOLD);
-				mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
-				wattroff(state.main_area, A_REVERSE | A_BOLD);
-			}
-			else
-			{
-				wattroff(state.main_area, A_REVERSE);
-				mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
-			}
-		}
+      // print out the selected one with highlighting
+      if (state.selected_index == static_cast<int>(i))
+      {
+        wattron(state.main_area, A_REVERSE | A_BOLD);
+        mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
+        wattroff(state.main_area, A_REVERSE | A_BOLD);
+      }
+      else
+      {
+        wattroff(state.main_area, A_REVERSE);
+        mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
+      }
+    }
 
-		mvwprintw(state.main_area, 1, state.max_cols - 30, "[Enter to save, Esc to cancel]");
-		wrefresh(state.main_area);
-
-	}
+    mvwprintw(state.main_area, 1, state.max_cols - 30, "[Enter to save, Esc to cancel]");
+    wrefresh(state.main_area);
+  }
 }
 
 /* *
@@ -330,7 +326,7 @@ void UIManager::updateFooter()
   werase(state.footer);
   box(state.footer, 0, 0);
 
-  auto* current = state.player.getCurrentSong();
+  auto *current = state.player.getCurrentSong();
   if (current != nullptr)
   {
     mvwprintw(state.footer, 1, 2, "Now Playing: %s - %s", current->artist_name.c_str(), current->song_name.c_str());
@@ -366,78 +362,79 @@ void UIManager::updateMainArea()
     werase(state.main_area);
     box(state.main_area, 0, 0);
 
-		// left side album art
-		int album_width = (state.max_cols / 2) - 2;
-		int album_height = state.max_rows - 7;
+    // left side album art
+    int album_width = (state.max_cols / 2) - 2;
+    int album_height = state.max_rows - 7;
 
-		auto *current = state.player.getCurrentSong();
-		if (current != nullptr)
-		{
-			// update album art ?
-			if (state.cached_song_path != current->song_path)
-			{
-				state.cached_song_path = current->song_path;
+    auto *current = state.player.getCurrentSong();
+    if (current != nullptr)
+    {
+      // update album art ?
+      if (state.cached_song_path != current->song_path)
+      {
+        state.cached_song_path = current->song_path;
 
-				if (!current->cached_image.pixels.empty())
-				{
-					state.current_art = Art::Generate(current->cached_image, state.art_color_mode, state.art_render_mode, album_width, album_height);
-				}
-				else
-				{
-					// no image
-					state.current_art = Art::AsciiCanvas();
-				}
-			}
+        if (!current->cached_image.pixels.empty())
+        {
+          state.current_art = Art::Generate(current->cached_image, state.art_color_mode, state.art_render_mode,
+                                            album_width, album_height);
+        }
+        else
+        {
+          // no image
+          state.current_art = Art::AsciiCanvas();
+        }
+      }
 
-			// Draw the art
-			if (!state.current_art.cells.empty())
-			{
-				int album_y_offset = 1 + (album_height - state.current_art.height) / 2;
-				if (album_y_offset < 1)
-				{
-					album_y_offset = 1;
-				}
-				drawAsciiArt(state.main_area, album_y_offset, 2, state.current_art);
-			}
-			else
-			{
-				mvwprintw(state.main_area, 2, 2, "[no cover art]");
-			}
+      // Draw the art
+      if (!state.current_art.cells.empty())
+      {
+        int album_y_offset = 1 + (album_height - state.current_art.height) / 2;
+        if (album_y_offset < 1)
+        {
+          album_y_offset = 1;
+        }
+        drawAsciiArt(state.main_area, album_y_offset, 2, state.current_art);
+      }
+      else
+      {
+        mvwprintw(state.main_area, 2, 2, "[no cover art]");
+      }
 
-			// right side, song info
-			int info_x = album_width + 4;
-			int info_y = 2;
+      // right side, song info
+      int info_x = album_width + 4;
+      int info_y = 2;
 
-			mvwprintw(state.main_area, info_y, info_x, "Now Playing:");
-			mvwprintw(state.main_area, info_y + 1, info_x, "%s", current->song_name.c_str());
-			mvwprintw(state.main_area, info_y + 3, info_x, "Artist");
-			mvwprintw(state.main_area, info_y + 4, info_x, "%s", current->artist_name.c_str());
+      mvwprintw(state.main_area, info_y, info_x, "Now Playing:");
+      mvwprintw(state.main_area, info_y + 1, info_x, "%s", current->song_name.c_str());
+      mvwprintw(state.main_area, info_y + 3, info_x, "Artist");
+      mvwprintw(state.main_area, info_y + 4, info_x, "%s", current->artist_name.c_str());
 
-			// progress bar
-			int pos = state.player.getCurrentPositionSeconds();
-			int total = state.player.getSongLengthSeconds();
-			int percent = state.player.getProgressPercent();
+      // progress bar
+      int pos = state.player.getCurrentPositionSeconds();
+      int total = state.player.getSongLengthSeconds();
+      int percent = state.player.getProgressPercent();
 
-			int bar_width = state.max_cols - info_x - 4;
-			int filled = (bar_width * percent) / 100;
+      int bar_width = state.max_cols - info_x - 4;
+      int filled = (bar_width * percent) / 100;
 
-			std::string bar;
-			for (int i = 0; i < bar_width; ++i)
-			{
-				bar += (i < filled) ? "█" : "░";
-			}
+      std::string bar;
+      for (int i = 0; i < bar_width; ++i)
+      {
+        bar += (i < filled) ? "█" : "░";
+      }
 
-			mvwprintw(state.main_area, info_y + 7, info_x, "%s", bar.c_str());
-			mvwprintw(state.main_area, info_y + 8, info_x, "%s / %s", Util::formatDuration(pos).c_str(), Util::formatDuration(total).c_str());
+      mvwprintw(state.main_area, info_y + 7, info_x, "%s", bar.c_str());
+      mvwprintw(state.main_area, info_y + 8, info_x, "%s / %s", Util::formatDuration(pos).c_str(),
+                Util::formatDuration(total).c_str());
+    }
+    else
+    {
+      mvwprintw(state.main_area, 2, 2, "No Track Playing");
+    }
 
-		}
-		else
-		{
-			mvwprintw(state.main_area, 2, 2, "No Track Playing");
-		}
-
-		wrefresh(state.main_area);
-		break;
+    wrefresh(state.main_area);
+    break;
   }
 }
 
@@ -453,7 +450,7 @@ void UIManager::run()
 
   while ((ch = getch()) != 'q')
   {
-		napms(5); // sleep 16ms
+    napms(5); // sleep 16ms
     // tab switching
     if (ch == KEY_LEFT || ch == 'h')
     {
@@ -486,58 +483,64 @@ void UIManager::run()
       state.player.clearQueue();
     }
 
-		if (ch == 'a' || ch == 'A')
-		{
-			switch (state.art_color_mode)
-			{
-				case Art::ColorMode::ANSI_256:
-					state.art_color_mode = Art::ColorMode::GRAYSCALE;
-					break;
-				case Art::ColorMode::GRAYSCALE:
-					state.art_color_mode = Art::ColorMode::ANSI_256;
-					break;
-			}
-			// force art regen on next frame
-			state.cached_song_path.clear();
-		}
+    if (ch == 'a' || ch == 'A')
+    {
+      switch (state.art_color_mode)
+      {
+      case Art::ColorMode::ANSI_256:
+        state.art_color_mode = Art::ColorMode::GRAYSCALE;
+        break;
+      case Art::ColorMode::GRAYSCALE:
+        state.art_color_mode = Art::ColorMode::ANSI_256;
+        break;
+      }
+      // force art regen on next frame
+      state.cached_song_path.clear();
+    }
 
-		if (ch == 'z' || ch == 'Z')
-		{
-			switch (state.art_render_mode)
-			{
-				case Art::RenderMode::BLOCK:
-					state.art_render_mode = Art::RenderMode::DETAILED;
-					break;
-				case Art::RenderMode::DETAILED:
-				  state.art_render_mode = Art::RenderMode::BLOCK;
-					break;
-			}
-			// force art regen on next frame
-			state.cached_song_path.clear();
-		}
+    if (ch == 'z' || ch == 'Z')
+    {
+      switch (state.art_render_mode)
+      {
+      case Art::RenderMode::BLOCK:
+        state.art_render_mode = Art::RenderMode::DETAILED;
+        break;
+      case Art::RenderMode::DETAILED:
+        state.art_render_mode = Art::RenderMode::BLOCK;
+        break;
+      }
+      // force art regen on next frame
+      state.cached_song_path.clear();
+    }
 
     // directory browser input
     if (state.current_tab == Tab::directory)
     {
       switch (ch)
       {
-			case 'k':
+      case 'k':
       case KEY_UP:
         if (state.selected_index > 0)
-				{
-         state.selected_index--;
-				}
+        {
+          state.selected_index--;
+        }
         break;
-			case 'j':
-			case KEY_DOWN:
+      case 'j':
+      case KEY_DOWN:
         if (state.selected_index < static_cast<int>(state.item_uris.size()) - 1)
-				{
+        {
           state.selected_index++;
-				}
+        }
         break;
       case 27: // ESC
-			case '-':
+      case '-':
         state.current_directory = getParentDirectory(state.current_directory);
+
+        if (state.current_directory == "")
+        {
+          state.current_directory = "/";
+        }
+
         state.selected_index = 0;
         break;
       case '\n':
@@ -548,65 +551,73 @@ void UIManager::run()
           if (state.item_types[state.selected_index] == ItemType::Directory)
           {
             // append dir to curr dir, we go down by 1
+            if (state.current_directory == "/")
+            {
+              state.current_directory.append(state.item_uris[state.selected_index]);
+              state.current_directory.pop_back(); // remove trailing /
+              state.selected_index = 0;
+              break;
+            }
+
             state.current_directory.append("/" + state.item_uris[state.selected_index]);
             state.current_directory.pop_back(); // remove trailing /
             state.selected_index = 0;
           }
           else
           {
-						// check if it ends with any applicable formats
-						std::string song_file = state.item_uris[state.selected_index];
-						if (song_file.ends_with(".mp3") || song_file.ends_with(".flac") || song_file.ends_with(".wav"))
-						{
-							// add this song to the queue
-							SongMetadata song;
-							song.song_path = state.current_directory + "/" + state.item_uris[state.selected_index];
+            // check if it ends with any applicable formats
+            std::string song_file = state.item_uris[state.selected_index];
+            if (song_file.ends_with(".mp3") || song_file.ends_with(".flac") || song_file.ends_with(".wav"))
+            {
+              // add this song to the queue
+              SongMetadata song;
+              song.song_path = state.current_directory + "/" + state.item_uris[state.selected_index];
 
-							// ask taglib to process artist name and image
-							TagLib::FileRef f(song.song_path.c_str());
+              // ask taglib to process artist name and image
+              TagLib::FileRef f(song.song_path.c_str());
 
-							song.song_name = std::string(f.tag()->title().toCString());
-							song.artist_name = std::string(f.tag()->artist().toCString());
+              song.song_name = std::string(f.tag()->title().toCString());
+              song.artist_name = std::string(f.tag()->artist().toCString());
 
-						// try to get image embedded in TagLib
-						auto pictures = f.tag()->complexProperties("PICTURE");
-						if (!pictures.isEmpty())
-						{
-							// extract the first picture
-							auto &pic = pictures.front();
-							auto it = pic.find("data");
-							if (it != pic.end() && it->second.type() == TagLib::Variant::ByteVector)
-							{
-								TagLib::ByteVector bv = it->second.value<TagLib::ByteVector>();
-								Art::LoadImageMemory(song.cached_image, reinterpret_cast<const uint8_t *>(bv.data()), bv.size());
-							}
-						}
-						else
-						{
-							// resolve with external cover image in path
-							song.album_image_path = Art::ResolveImage(song.song_path);
-							if (song.album_image_path != "no image")
-							{
-								Art::LoadImageFile(song.cached_image, song.album_image_path);
-							}
-						}
+              // try to get image embedded in TagLib
+              auto pictures = f.tag()->complexProperties("PICTURE");
+              if (!pictures.isEmpty())
+              {
+                // extract the first picture
+                auto &pic = pictures.front();
+                auto it = pic.find("data");
+                if (it != pic.end() && it->second.type() == TagLib::Variant::ByteVector)
+                {
+                  TagLib::ByteVector bv = it->second.value<TagLib::ByteVector>();
+                  Art::LoadImageMemory(song.cached_image, reinterpret_cast<const uint8_t *>(bv.data()), bv.size());
+                }
+              }
+              else
+              {
+                // resolve with external cover image in path
+                song.album_image_path = Art::ResolveImage(song.song_path);
+                if (song.album_image_path != "no image")
+                {
+                  Art::LoadImageFile(song.cached_image, song.album_image_path);
+                }
+              }
 
-							song.album_image_path = "unknown";
+              song.album_image_path = "unknown";
 
-							bool was_empty = state.player.isEmpty();
-							state.player.queueSong(song);
+              bool was_empty = state.player.isEmpty();
+              state.player.queueSong(song);
 
-							// If this is the first song, start playing it immediately
-							if (was_empty)
-							{
-								state.player.nextSong();
-							}
-						}
-						else
-						{
-							// not a valid file
-							mvwprintw(state.main_area, 10, 2, "Not a supported music file");
-						}
+              // If this is the first song, start playing it immediately
+              if (was_empty)
+              {
+                state.player.nextSong();
+              }
+            }
+            else
+            {
+              // not a valid file
+              mvwprintw(state.main_area, 10, 2, "Not a supported music file");
+            }
           }
         }
         break;
@@ -640,5 +651,5 @@ void UIManager::run()
   }
 
   Util::debugPrint("User has quit TUI");
-	return;
+  return;
 }
