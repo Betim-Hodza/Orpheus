@@ -3,15 +3,19 @@
 #include "miniaudio.h"
 #include "util.hpp"
 
-extern "C" void miniaudio_on_song_end(void* user_data, ma_sound* pSound)
+extern "C" void miniaudio_on_song_end(void *user_data, ma_sound *pSound)
 {
   (void)pSound;
-  if (!user_data) return;
-  static_cast<MiniAudioPlayer*>(user_data)->onSongEnd();
+  if (!user_data)
+    return;
+  static_cast<MiniAudioPlayer *>(user_data)->onSongEnd();
 }
 
-MiniAudioPlayer::MiniAudioPlayer()  = default;
-MiniAudioPlayer::~MiniAudioPlayer() { cleanup(); }
+MiniAudioPlayer::MiniAudioPlayer() = default;
+MiniAudioPlayer::~MiniAudioPlayer()
+{
+  cleanup();
+}
 
 void MiniAudioPlayer::init()
 {
@@ -38,7 +42,7 @@ void MiniAudioPlayer::cleanup()
   ma_engine_uninit(&audio_state.engine);
 }
 
-bool MiniAudioPlayer::loadSong(const std::string& path)
+bool MiniAudioPlayer::loadSong(const std::string &path)
 {
   ma_result result = ma_sound_init_from_file(&audio_state.engine, path.c_str(), 0, NULL, NULL, &audio_state.sound);
   if (result != MA_SUCCESS)
@@ -55,13 +59,13 @@ bool MiniAudioPlayer::loadSong(const std::string& path)
   // Cache length
   ma_uint64 len;
   if (ma_sound_get_length_in_pcm_frames(&audio_state.sound, &len) == MA_SUCCESS)
-	{
+  {
     song_length_pcm = (int)len;
-	}
+  }
   else
-	{
+  {
     song_length_pcm = 0;
-	}
+  }
 
   return true;
 }
@@ -69,13 +73,13 @@ bool MiniAudioPlayer::loadSong(const std::string& path)
 void MiniAudioPlayer::stopCurrent()
 {
 
-	if (audio_state.sound_is_initialized)
-	{
-		ma_sound_stop(&audio_state.sound);
-		ma_sound_uninit(&audio_state.sound);
-		audio_state.sound_is_initialized = false;
-		current_index = -1;
-	}
+  if (audio_state.sound_is_initialized)
+  {
+    ma_sound_stop(&audio_state.sound);
+    ma_sound_uninit(&audio_state.sound);
+    audio_state.sound_is_initialized = false;
+    current_index = -1;
+  }
 }
 
 bool MiniAudioPlayer::isCurrentEnded()
@@ -95,7 +99,7 @@ bool MiniAudioPlayer::isAtEnd() const
   return ma_sound_at_end(&audio_state.sound) != 0;
 }
 
-bool MiniAudioPlayer::startSong(const std::string& song_path)
+bool MiniAudioPlayer::startSong(const std::string &song_path)
 {
   stopCurrent();
 
@@ -120,12 +124,12 @@ bool MiniAudioPlayer::startSong(const std::string& song_path)
   return true;
 }
 
-void MiniAudioPlayer::queueSong(const SongMetadata& song)
+void MiniAudioPlayer::queueSong(const SongMetadata &song)
 {
   song_queue.push_back(song);
 }
 
-void MiniAudioPlayer::queueSongFirst(const SongMetadata& song)
+void MiniAudioPlayer::queueSongFirst(const SongMetadata &song)
 {
   song_queue.insert(song_queue.begin(), song);
 }
@@ -133,9 +137,9 @@ void MiniAudioPlayer::queueSongFirst(const SongMetadata& song)
 bool MiniAudioPlayer::playCurrent()
 {
   if (song_queue.empty())
-	{
+  {
     return false;
-	}
+  }
 
   current_index++;
   if (current_index < 0 || current_index >= (int)song_queue.size())
@@ -144,7 +148,7 @@ bool MiniAudioPlayer::playCurrent()
     return false;
   }
 
-  const auto& cur = song_queue[current_index];
+  const auto &cur = song_queue[current_index];
   if (!loadSong(cur.song_path))
   {
     Util::errorPrint("Couldn't load song from queue :(");
@@ -179,20 +183,12 @@ bool MiniAudioPlayer::nextSong()
 
 bool MiniAudioPlayer::prevSong()
 {
-  // If far enough into the song, go to next instead of restarting
-  if (current_index >= 0 && ma_sound_is_playing(&audio_state.sound))
+  if (current_index == -1)
   {
-    ma_uint64 cursor = 0;
-    ma_uint32 sample_rate = ma_engine_get_sample_rate(&audio_state.engine);
-    if (ma_sound_get_cursor_in_pcm_frames(&audio_state.sound, &cursor) == MA_SUCCESS
-        && cursor >= 5 * sample_rate)
-    {
-      // Past 5 seconds, skip to next
-      return nextSong();
-    }
+    // nothing is playing
+    return false;
   }
 
-  // Go back to previous in queue
   if (current_index >= 0)
   {
     if (audio_state.sound_is_initialized)
@@ -202,16 +198,21 @@ bool MiniAudioPlayer::prevSong()
       memset(&audio_state.sound, 0, sizeof(audio_state.sound));
       audio_state.sound_is_initialized = false;
     }
+
+    // play_Current adds to the index by 1
+    // if the index is < 1, we dont keep on subtracting (playCurrent isn't called)
+    current_index--;
+    if (current_index < 0)
+    {
+      current_index = -1;
+      return false;
+    }
+    current_index--;
+
+    return playCurrent();
   }
 
-  current_index--;
-  if (current_index < 0)
-  {
-    current_index = -1;
-    return false;
-  }
-
-  return playCurrent();
+  return false;
 }
 
 void MiniAudioPlayer::clearQueue()
@@ -233,20 +234,20 @@ void MiniAudioPlayer::clearQueue()
 bool MiniAudioPlayer::pauseSong()
 {
   if (current_index < 0)
-	{
+  {
     return false;
-	}
+  }
 
   ma_bool32 isPlaying = ma_sound_is_playing(&audio_state.sound);
 
   if (isPlaying == MA_TRUE)
-	{
+  {
     return ma_sound_stop(&audio_state.sound) == MA_SUCCESS;
-	}
+  }
   else
-	{
+  {
     return ma_sound_start(&audio_state.sound) == MA_SUCCESS;
-	}
+  }
 }
 
 bool MiniAudioPlayer::rewind()
@@ -260,29 +261,30 @@ bool MiniAudioPlayer::rewind()
   return ma_sound_seek_to_pcm_frame(&audio_state.sound, 0) == MA_SUCCESS;
 }
 
-const SongMetadata* MiniAudioPlayer::getCurrentSong() const
+const SongMetadata *MiniAudioPlayer::getCurrentSong() const
 {
   if (current_index < 0 || current_index >= (int)song_queue.size())
-	{
+  {
     return nullptr;
-	}
+  }
 
   return &song_queue[current_index];
 }
 
 std::string MiniAudioPlayer::getCurrentSongPath() const
 {
-  auto* song = getCurrentSong();
-  if (!song) return "";
+  auto *song = getCurrentSong();
+  if (!song)
+    return "";
   return song->song_path;
 }
 
-const SongMetadata* MiniAudioPlayer::getQueueSong(unsigned int index) const
+const SongMetadata *MiniAudioPlayer::getQueueSong(unsigned int index) const
 {
   if (index >= song_queue.size())
-	{
+  {
     return nullptr;
-	}
+  }
 
   return &song_queue[index];
 }
