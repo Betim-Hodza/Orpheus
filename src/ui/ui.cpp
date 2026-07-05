@@ -291,6 +291,50 @@ void UIManager::updateDirectoryBrowser()
     }
     state.last_listed_directory = state.current_directory;
 
+    // filter out non music files (keep the /)
+    std::vector<std::string> music_fext = {"mp3", "m4a", "flac", "wav"};
+
+    for (size_t i = 0; i < state.item_uris.size();)
+    {
+      std::string uri = state.item_uris[i];
+      size_t dot = uri.find_last_of('.');
+
+      bool is_music = false;
+
+      if (dot != std::string::npos)
+      {
+        std::string ext = uri.substr(dot + 1);
+
+        for (const auto &mtype : music_fext)
+        {
+          if (ext == mtype)
+          {
+            is_music = true;
+            break;
+          }
+        }
+      }
+
+      if (!is_music)
+      {
+        // if not a directory
+        if (!state.item_uris[i].ends_with('/'))
+        {
+          // need to filter the itemtype too
+          state.item_types.erase(state.item_types.begin() + i);
+          state.item_uris.erase(state.item_uris.begin() + i);
+        }
+        else
+        {
+          ++i;
+        }
+      }
+      else
+      {
+        ++i;
+      }
+    }
+
     // print out all the items
     for (size_t i = 0; i < state.item_uris.size(); i++)
     {
@@ -562,6 +606,8 @@ void UIManager::run()
             state.current_directory.append("/" + state.item_uris[state.selected_index]);
             state.current_directory.pop_back(); // remove trailing /
             state.selected_index = 0;
+
+            Util::debugPrint("current_dir: " + state.current_directory);
           }
           else
           {
@@ -572,6 +618,7 @@ void UIManager::run()
               // add this song to the queue
               SongMetadata song;
               song.song_path = state.current_directory + "/" + state.item_uris[state.selected_index];
+              Util::debugPrint("song_path: " + song.song_path);
 
               // ask taglib to process artist name and image
               TagLib::FileRef f(song.song_path.c_str());
@@ -619,6 +666,7 @@ void UIManager::run()
               mvwprintw(state.main_area, 10, 2, "Not a supported music file");
             }
           }
+          Util::debugPrint("current_dir: " + state.current_directory);
         }
         break;
       }
