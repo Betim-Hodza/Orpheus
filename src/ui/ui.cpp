@@ -153,6 +153,8 @@ void UIManager::init(const std::filesystem::path &music_root)
     exit(1);
   }
 
+  state.items_per_page = getmaxy(state.main_area) - 4;
+
   state.music_root = music_root.string();
   state.current_directory = music_root.string();
   state.current_tab = Tab::home;
@@ -280,9 +282,10 @@ void UIManager::updateDirectoryBrowser()
   box(state.main_area, 0, 0);
   mvwprintw(state.main_area, 1, 2, "Directory: %s", state.current_directory.c_str());
 
-  // only update when we change directories
+  // only update when we change directories or scroll past max items shown on screen
   if (state.current_directory != state.last_listed_directory || state.current_tab == Tab::directory)
   {
+
     // err msg inside listDir func
     if (!Util::listDir(state.current_directory, state.item_uris, state.item_types))
     {
@@ -335,24 +338,28 @@ void UIManager::updateDirectoryBrowser()
       }
     }
 
-    // print out all the items
-    for (size_t i = 0; i < state.item_uris.size(); i++)
+    // we want to scroll based on page count
+    int offset = (state.page - 1) * state.items_per_page;
+
+    for (size_t i = offset; i < state.item_uris.size() && static_cast<int>(i) < offset + state.items_per_page; i++)
     {
-      // don't print too many items
-      if (static_cast<int>(i) + 3 >= getmaxy(state.main_area))
-        break;
+      int row = i - offset;
+
+      // if state.selected_index is past 'screen 1' of items, go to screen 2,
+      // but we want screen n -> n+1 and if we go back n+1 -> n
+      // we know we can only display a max char of getmaxy(state.main_area)
 
       // print out the selected one with highlighting
       if (state.selected_index == static_cast<int>(i))
       {
         wattron(state.main_area, A_REVERSE | A_BOLD);
-        mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
+        mvwprintw(state.main_area, row + 3, 2, "%s", state.item_uris[i].c_str());
         wattroff(state.main_area, A_REVERSE | A_BOLD);
       }
       else
       {
         wattroff(state.main_area, A_REVERSE);
-        mvwprintw(state.main_area, i + 3, 2, "%s", state.item_uris[i].c_str());
+        mvwprintw(state.main_area, row + 3, 2, "%s", state.item_uris[i].c_str());
       }
     }
 
@@ -568,6 +575,7 @@ void UIManager::run()
         {
           state.selected_index--;
         }
+        state.page = (state.selected_index / state.items_per_page) + 1;
         break;
       case 'j':
       case KEY_DOWN:
@@ -575,6 +583,7 @@ void UIManager::run()
         {
           state.selected_index++;
         }
+        state.page = (state.selected_index / state.items_per_page) + 1;
         break;
       case 27: // ESC
       case '-':
@@ -586,6 +595,7 @@ void UIManager::run()
         }
 
         state.selected_index = 0;
+        state.page = 1;
         break;
       case '\n':
 
@@ -599,6 +609,7 @@ void UIManager::run()
             {
               state.current_directory.append(state.item_uris[state.selected_index]);
               state.current_directory.pop_back(); // remove trailing /
+              state.page = 1;
               state.selected_index = 0;
               break;
             }
@@ -606,6 +617,7 @@ void UIManager::run()
             state.current_directory.append("/" + state.item_uris[state.selected_index]);
             state.current_directory.pop_back(); // remove trailing /
             state.selected_index = 0;
+            state.page = 1;
 
             Util::debugPrint("current_dir: " + state.current_directory);
           }

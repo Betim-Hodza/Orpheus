@@ -1,13 +1,10 @@
-#ifndef UI_H
-#define UI_H
+#pragma once
 
 // direct includes
-#include <errno.h>
 #include <ncurses.h>
-#include <unistd.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <filesystem>
 #include <string>
@@ -56,6 +53,8 @@ struct UI
   std::vector<std::string> item_uris;
   std::vector<ItemType> item_types;
   int selected_index = 0;
+  int page = 1; // page number for scrolling
+  int items_per_page = 0;
 
   // turn on and off screens
   Tab current_tab = Tab::home;
@@ -97,5 +96,3 @@ public:
 
   std::string getParentDirectory(const std::string &path);
 };
-
-#endif

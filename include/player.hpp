@@ -21,6 +21,7 @@ struct PlayerData
   ma_engine engine;
   ma_sound sound;
   bool sound_is_initialized = false;
+  ma_splitter_node splitter;
 };
 
 class MiniAudioPlayer
@@ -46,8 +47,8 @@ public:
   size_t getQueueSize() const { return song_queue.size(); }
   bool isEmpty() const        { return song_queue.empty(); }
 
-  bool pauseSong(); 
-  bool rewind();   
+  bool pauseSong();
+  bool rewind();
 
   // Called from ui.cpp event loop: returns true when song has ended (for auto-advance)
   bool isCurrentEnded();
@@ -69,6 +70,9 @@ public:
   int getSongLengthSeconds() const;
   int getProgressPercent() const;
 
+  // EQ / Visualizer functions
+  bool initVisualizerAudio();
+
 private:
   PlayerData audio_state;
   int current_index = -1;                // index into song_queue of what's playing
@@ -79,5 +83,3 @@ private:
   void stopCurrent();
   bool loadSong(const std::string& path);
 };
-
-

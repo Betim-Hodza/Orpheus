@@ -25,6 +25,13 @@ void MiniAudioPlayer::init()
     Util::errorPrint("init miniaudio failed: " + std::string(ma_result_description(result)));
     return;
   }
+  // start splitter for EQ (lives for life of engine)
+  if (!initVisualizerAudio())
+  {
+    // for now we'll exit early on fail (should succeed every time)
+    Util::errorPrint("initVisualizerAudio failed");
+    return;
+  }
 }
 
 void MiniAudioPlayer::onSongEnd()
@@ -44,10 +51,18 @@ void MiniAudioPlayer::cleanup()
 
 bool MiniAudioPlayer::loadSong(const std::string &path)
 {
-  ma_result result = ma_sound_init_from_file(&audio_state.engine, path.c_str(), 0, NULL, NULL, &audio_state.sound);
+  // sound plays from splitter so we pass it to not attach to the original endpoint
+  ma_result result = ma_sound_init_from_file(&audio_state.engine, path.c_str(), MA_SOUND_FLAG_NO_DEFAULT_ATTACHMENT, NULL, NULL, &audio_state.sound);
   if (result != MA_SUCCESS)
   {
     Util::errorPrint("Failed to load song: " + std::string(ma_result_description(result)));
+    return false;
+  }
+  // attach audio to speaker output
+  result = ma_node_attach_output_bus(&audio_state.sound, 0, &audio_state.splitter, 0);
+  if (result != MA_SUCCESS)
+  {
+    Util::errorPrint("Failed to attach audio to splitter 0: " + std::string(ma_result_description(result)));
     return false;
   }
 
@@ -337,4 +352,39 @@ int MiniAudioPlayer::getProgressPercent() const
 
   int pos = getCurrentPositionSeconds();
   return (pos * 100) / total;
+}
+
+bool MiniAudioPlayer::initVisualizerAudio()
+{
+  // grab node graph
+  ma_node_graph *node_graph = nullptr;
+  node_graph = ma_engine_get_node_graph(&audio_state.engine);
+  ma_node *endpoint = ma_node_graph_get_endpoint(node_graph);
+
+  // setup channels and config for splitter
+  ma_uint32 channels = ma_engine_get_channels(&audio_state.engine);
+  ma_splitter_node_config cfg = ma_splitter_node_config_init(channels);
+
+  if (ma_splitter_node_init(node_graph, &cfg, NULL, &audio_state.splitter) != MA_SUCCESS)
+  {
+    Util::errorPrint("Splitter init failed");
+    return false;
+  }
+
+
+  // splitter output 0 -> speakers
+  if (ma_node_attach_output_bus(&audio_state.splitter, 0, endpoint, 0) != MA_SUCCESS)
+  {
+    Util::errorPrint("Failed to attach splitter output 0 to endpoint");
+    return false;
+  }
+  // splitter output 1 -> sink
+  if (ma_node_attach_output_bus(&audio_state.splitter, 1, endpoint, 0) != MA_SUCCESS)
+  {
+    Util::errorPrint("Failed to attach splitter output 1 to endpoint");
+    return false;
+  }
+
+  Util::debugPrint("initVisualizerAudio completed successfully");
+  return true;
 }
