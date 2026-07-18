@@ -41,7 +41,8 @@ pkg_check_modules(LUA REQUIRED IMPORTED_TARGET lua)
 set(SOURCES
     src/main.cpp
     src/ui/ui.cpp
-		src/ui/art.cpp
+    src/ui/art.cpp
+    src/ui/visualizer.cpp
     src/player/player.cpp
     src/util/log.cpp
     src/util/util.cpp

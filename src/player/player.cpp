@@ -2,6 +2,72 @@
 #include "player.hpp"
 #include "miniaudio.h"
 #include "util.hpp"
+#include "ringbuffer.hpp"
+#include <cstring>
+
+/* Custom tap node (audio passes through)
+* Sits in the main audio path between the sound and the endpoint.
+* Copies audio straight through to the output while also pushing a
+* mono copy into the RingBuffer for the UI thread to FFT.
+* this is running on the audio thread so it has to be fast
+* */
+static void tap_process(ma_node *pNode, const float **ppFramesIn,
+                        ma_uint32 *pFrameCountIn, float **ppFramesOut,
+                        ma_uint32 *pFrameCountOut)
+{
+  TapNode *tap = reinterpret_cast<TapNode *>(pNode);
+  const float *in = ppFramesIn[0];
+  float *out = ppFramesOut[0];
+  ma_uint32 frames = *pFrameCountIn;
+  ma_uint32 channels = ma_node_get_input_channels(pNode, 0);
+
+  // Pass-through first: audio must reach the speakers.
+  if (in && out && frames > 0)
+  {
+    std::memcpy(out, in, frames * channels * sizeof(float));
+  }
+
+  // No tasks that have extra processing time. e.g. malloc, logging, locks...
+  if (tap && tap->ring && frames > 0)
+  {
+    if (channels == 1)
+    {
+      tap->ring->write(in, frames);
+    }
+    else if (channels == 2)
+    {
+      // Mix stereo -> mono in stack chunks to avoid dropping samples when
+      // miniaudio delivers more than 512 frames at once.
+      float mono[512];
+      ma_uint32 written = 0;
+      while (written < frames)
+      {
+        ma_uint32 chunk = frames - written;
+        if (chunk > 512)
+          chunk = 512;
+        for (ma_uint32 i = 0; i < chunk; ++i)
+        {
+          mono[i] = (in[(written + i) * 2 + 0] + in[(written + i) * 2 + 1]) * 0.5f;
+        }
+        tap->ring->write(mono, chunk);
+        written += chunk;
+      }
+    }
+    // other channel counts: just drop
+    tap->frames_written.fetch_add(frames, std::memory_order_relaxed);
+  }
+
+  *pFrameCountOut = frames;
+}
+
+static ma_node_vtable g_tap_vtable =
+{
+  tap_process,
+  nullptr,    // onGetRequiredInputFrameCount (optional)
+  1,          // 1 input bus
+  1,          // 1 output bus
+  0           // no flags: this is a normal passthrough node
+};
 
 extern "C" void miniaudio_on_song_end(void *user_data, ma_sound *pSound)
 {
@@ -25,7 +91,7 @@ void MiniAudioPlayer::init()
     Util::errorPrint("init miniaudio failed: " + std::string(ma_result_description(result)));
     return;
   }
-  // start splitter for EQ (lives for life of engine)
+  // start visualizer tap node (lives for life of engine)
   if (!initVisualizerAudio())
   {
     // for now we'll exit early on fail (should succeed every time)
@@ -46,25 +112,37 @@ void MiniAudioPlayer::cleanup()
 
   song_queue.clear();
 
+  // Tear down visualizer nodes before the engine so the audio thread
+  // can't call tap_process after the ring buffer is gone.
+  if (audio_state.visualizer_initialized)
+  {
+    ma_node_uninit(&audio_state.tap.base, NULL);
+    audio_state.visualizer_initialized = false;
+  }
+
   ma_engine_uninit(&audio_state.engine);
 }
 
 bool MiniAudioPlayer::loadSong(const std::string &path)
 {
-  // sound plays from splitter so we pass it to not attach to the original endpoint
+  // don't attach to the default endpoint; we'll route sound -> tap -> endpoint
   ma_result result = ma_sound_init_from_file(&audio_state.engine, path.c_str(), MA_SOUND_FLAG_NO_DEFAULT_ATTACHMENT, NULL, NULL, &audio_state.sound);
   if (result != MA_SUCCESS)
   {
     Util::errorPrint("Failed to load song: " + std::string(ma_result_description(result)));
     return false;
   }
-  // attach audio to speaker output
-  result = ma_node_attach_output_bus(&audio_state.sound, 0, &audio_state.splitter, 0);
+  // attach sound to the TAP node (which then passes through to the endpoint)
+  result = ma_node_attach_output_bus(&audio_state.sound, 0, &audio_state.tap.base, 0);
   if (result != MA_SUCCESS)
   {
-    Util::errorPrint("Failed to attach audio to splitter 0: " + std::string(ma_result_description(result)));
+    Util::errorPrint("Failed to attach audio to tap: " + std::string(ma_result_description(result)));
     return false;
   }
+
+  // Make sure no stale FFT history leaks between songs.
+  if (audio_state.tap_ring)
+    audio_state.tap_ring->clear();
 
   audio_state.sound_is_initialized = true;
 
@@ -356,35 +434,39 @@ int MiniAudioPlayer::getProgressPercent() const
 
 bool MiniAudioPlayer::initVisualizerAudio()
 {
-  // grab node graph
-  ma_node_graph *node_graph = nullptr;
-  node_graph = ma_engine_get_node_graph(&audio_state.engine);
+  // grab node graph + endpoint (speakers)
+  ma_node_graph *node_graph = ma_engine_get_node_graph(&audio_state.engine);
   ma_node *endpoint = ma_node_graph_get_endpoint(node_graph);
 
-  // setup channels and config for splitter
   ma_uint32 channels = ma_engine_get_channels(&audio_state.engine);
-  ma_splitter_node_config cfg = ma_splitter_node_config_init(channels);
 
-  if (ma_splitter_node_init(node_graph, &cfg, NULL, &audio_state.splitter) != MA_SUCCESS)
+  // Tap node (passthrough) sits in the main audio path: sound -> tap -> endpoint.
+  audio_state.tap_ring = std::make_unique<RingBuffer>(16384);
+
+  ma_uint32 input_channels[1]  = { channels };
+  ma_uint32 output_channels[1] = { channels };
+
+  ma_node_config tap_cfg = ma_node_config_init();
+  tap_cfg.vtable          = &g_tap_vtable;
+  tap_cfg.pInputChannels  = input_channels;
+  tap_cfg.pOutputChannels = output_channels;
+
+  if (ma_node_init(node_graph, &tap_cfg, NULL, &audio_state.tap.base) != MA_SUCCESS)
   {
-    Util::errorPrint("Splitter init failed");
+    Util::errorPrint("Tap node init failed");
+    return false;
+  }
+  audio_state.tap.ring = audio_state.tap_ring.get();
+
+  // tap -> endpoint (you hear this)
+  if (ma_node_attach_output_bus(&audio_state.tap, 0, endpoint, 0) != MA_SUCCESS)
+  {
+    Util::errorPrint("Failed to attach tap to endpoint");
+    ma_node_uninit(&audio_state.tap.base, NULL);
     return false;
   }
 
-
-  // splitter output 0 -> speakers
-  if (ma_node_attach_output_bus(&audio_state.splitter, 0, endpoint, 0) != MA_SUCCESS)
-  {
-    Util::errorPrint("Failed to attach splitter output 0 to endpoint");
-    return false;
-  }
-  // splitter output 1 -> sink
-  if (ma_node_attach_output_bus(&audio_state.splitter, 1, endpoint, 0) != MA_SUCCESS)
-  {
-    Util::errorPrint("Failed to attach splitter output 1 to endpoint");
-    return false;
-  }
-
+  audio_state.visualizer_initialized = true;
   Util::debugPrint("initVisualizerAudio completed successfully");
   return true;
 }

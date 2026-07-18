@@ -2,7 +2,9 @@
 #pragma once
 #include "art.hpp"
 #include "miniaudio.h"
+#include "ringbuffer.hpp"
 #include <atomic>
+#include <memory>
 #include <string>
 #include <taglib/fileref.h>
 #include <vector>
@@ -16,12 +18,26 @@ struct SongMetadata
   Art::ImageData cached_image;
 };
 
+// Custom ma_node that copies incoming audio frames into a RingBuffer.
+// ma_node_base must be the first member it's what lets miniaudio
+// treat a TapNode* as a ma_node* (C-style inheritance).
+struct TapNode
+{
+  ma_node_base base;
+  RingBuffer *ring = nullptr;             // raw pointer; owned by PlayerData
+  std::atomic<uint64_t> frames_written{0}; // audio thread increments this
+};
+
 struct PlayerData
 {
   ma_engine engine;
   ma_sound sound;
   bool sound_is_initialized = false;
-  ma_splitter_node splitter;
+
+  // EQ visualizer
+  TapNode tap;                              // sits in the main audio path
+  std::unique_ptr<RingBuffer> tap_ring;
+  bool visualizer_initialized = false;
 };
 
 class MiniAudioPlayer
@@ -72,6 +88,9 @@ public:
 
   // EQ / Visualizer functions
   bool initVisualizerAudio();
+  RingBuffer* getRingBuffer() { return audio_state.tap_ring.get(); }
+  uint64_t getTapFramesWritten() const { return audio_state.tap.frames_written.load(); }
+  ma_uint32 getSampleRate() const { return ma_engine_get_sample_rate(&audio_state.engine); }
 
 private:
   PlayerData audio_state;

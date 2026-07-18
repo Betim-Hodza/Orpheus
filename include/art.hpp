@@ -41,6 +41,12 @@ struct AsciiCanvas
   int height = 0;
   ColorMode mode;
   std::vector<AsciiCell> cells;
+
+  // 16-step ANSI-256 ramp extracted from the image, sorted darkest ->
+  // brightest. Used by the visualizer so the EQ colors match the art.
+  // `has_palette` is false when no image was available.
+  int palette[16] = {};
+  bool has_palette = false;
 };
 
 /**

@@ -1,42 +1,16 @@
 #include "ui.hpp"
 #include "art.hpp"
+#include "colorpair.hpp"
 #include "player.hpp"
 #include "util.hpp"
 #include <ctime>
 #include <iomanip>
-#include <map>
 #include <ncurses.h>
 #include <sstream>
-#include <utility>
 
-// cache for ANSI-256 / grayscale color pairs
-static std::map<std::pair<int, int>, int> g_color_pair_cache;
-static int g_next_pair_id = 1;
 
 // grayscale density 0-9 mapped to ANSI-256 gray pallete indices
 static const int GRAYSCALE_ANSI_MAP[10] = {236, 238, 240, 242, 244, 246, 248, 250, 253, 255};
-
-/* *
- * @brief get or create a COLOR_PAIR id for (fg, bg)
- * fg and bg are ncurses color numbers
- *
- * @param fg
- * @param bg
- * */
-static int getColorPair(int fg, int bg)
-{
-  auto key = std::make_pair(fg, bg);
-  auto it = g_color_pair_cache.find(key);
-  if (it != g_color_pair_cache.end())
-  {
-    return it->second;
-  }
-
-  int pair_id = g_next_pair_id++;
-  init_pair(pair_id, fg, bg);
-  g_color_pair_cache[key] = pair_id;
-  return pair_id;
-}
 
 /* *
  * @brief Render one AsciiCell to ncurses window
@@ -53,11 +27,11 @@ static void drawCell(WINDOW *win, int y, int x, const Art::AsciiCell &cell, Art:
     // map density indices to actual ANSI gray color
     int ansi_fg = GRAYSCALE_ANSI_MAP[fg];
     int ansi_bg = GRAYSCALE_ANSI_MAP[bg];
-    pair_id = getColorPair(ansi_fg, ansi_bg);
+    pair_id = getSharedColorPair(ansi_fg, ansi_bg);
     break;
   }
   case Art::ColorMode::ANSI_256: {
-    pair_id = getColorPair(fg, bg);
+    pair_id = getSharedColorPair(fg, bg);
     break;
   }
   }
@@ -215,11 +189,13 @@ void UIManager::helpScreen()
   mvwprintw(state.main_area, 5, 2, "<BACKSPACE>           | Clear song queue");
   mvwprintw(state.main_area, 6, 2, "'A'                   | Cycle GRAYSCALE / ANSI for Album art");
   mvwprintw(state.main_area, 7, 2, "'Z'                   | Cycle BLOCK / DETAILED mode for Album art");
+  mvwprintw(state.main_area, 8, 2, "'V'                   | Cycle visualizer style (block/ansi/braille/spectrogram)");
+  mvwprintw(state.main_area, 9, 2, "'C'                   | Toggle visualizer palette (album-art / fixed)");
 
-  mvwprintw(state.main_area, 9, 2, "Directory Help:");
-  mvwprintw(state.main_area, 10, 2, "<UP> <DOWN> 'K' 'J'   | Scrolls up and down a list");
-  mvwprintw(state.main_area, 11, 2, "<ESC> '-'             | Goes up a directory");
-  mvwprintw(state.main_area, 12, 2, "<ENTER>               | Goes down a directory and adds song to queue");
+  mvwprintw(state.main_area, 11, 2, "Directory Help:");
+  mvwprintw(state.main_area, 12, 2, "<UP> <DOWN> 'K' 'J'   | Scrolls up and down a list");
+  mvwprintw(state.main_area, 13, 2, "<ESC> '-'             | Goes up a directory");
+  mvwprintw(state.main_area, 14, 2, "<ENTER>               | Goes down a directory and adds song to queue");
   wrefresh(state.main_area);
 }
 
@@ -435,6 +411,15 @@ void UIManager::updateMainArea()
           // no image
           state.current_art = Art::AsciiCanvas();
         }
+
+        // Feed the art's palette to the visualizer so the EQ renders in the
+        // album's colors. Mirrors the once-per-song cadence of art generation.
+        state.viz_state.has_dynamic_palette = state.current_art.has_palette;
+        if (state.current_art.has_palette)
+        {
+          for (int i = 0; i < 16; ++i)
+            state.viz_state.dynamic_palette[i] = state.current_art.palette[i];
+        }
       }
 
       // Draw the art
@@ -478,6 +463,22 @@ void UIManager::updateMainArea()
       mvwprintw(state.main_area, info_y + 7, info_x, "%s", bar.c_str());
       mvwprintw(state.main_area, info_y + 8, info_x, "%s / %s", Util::formatDuration(pos).c_str(),
                 Util::formatDuration(total).c_str());
+
+      // Visualizer / EQ: renders below the timer, right of the album art.
+      // but above the line of the "currently playing"
+      RingBuffer *ring = state.player.getRingBuffer();
+      if (ring)
+      {
+        int viz_x = info_x;
+        int viz_y = info_y + 9;       // one row below the timer
+        int viz_w = state.max_cols - viz_x - 2;
+        int viz_h = state.max_rows - viz_y - 6;
+        if (viz_w > 0 && viz_h > 0)
+        {
+          Visualizer::render(state.main_area, viz_y, viz_x, viz_w, viz_h,
+                             state.viz_state, *ring, state.player.getSampleRate());
+        }
+      }
     }
     else
     {
@@ -562,6 +563,30 @@ void UIManager::run()
       }
       // force art regen on next frame
       state.cached_song_path.clear();
+    }
+
+    // cycle visualizer style: block -> ansi-art -> braille -> spectrogram
+    if (ch == 'v' || ch == 'V')
+    {
+      switch (state.viz_state.style)
+      {
+        case Visualizer::Style::BLOCK:       state.viz_state.style = Visualizer::Style::ANSI_ART;    break;
+        case Visualizer::Style::ANSI_ART:    state.viz_state.style = Visualizer::Style::BRAILLE;     break;
+        case Visualizer::Style::BRAILLE:     state.viz_state.style = Visualizer::Style::SPECTROGRAM; break;
+        case Visualizer::Style::SPECTROGRAM: state.viz_state.style = Visualizer::Style::BLOCK;       break;
+      }
+      // force binning reconfigure on next frame
+      state.viz_state.analyzer.bar_count = 0;
+      Util::debugPrint("Visualizer style: " + Visualizer::styleName(state.viz_state.style));
+    }
+
+    // toggle visualizer color source: album-art palette <-> fixed PALETTE.
+    // Lets you A/B compare the dynamic art palette against the fixed ramp.
+    if (ch == 'c' || ch == 'C')
+    {
+      state.viz_state.use_dynamic_palette = !state.viz_state.use_dynamic_palette;
+      Util::debugPrint(std::string("Visualizer palette: ") +
+                       (state.viz_state.use_dynamic_palette ? "album-art" : "fixed"));
     }
 
     // directory browser input

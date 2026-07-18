@@ -12,6 +12,7 @@
 
 #include "art.hpp"
 #include "player.hpp"
+#include "visualizer.hpp"
 
 // macros
 #define MAX_ITEMS 1000
@@ -66,6 +67,9 @@ struct UI
   Art::ImageData cached_image;
   Art::AsciiCanvas current_art;
   std::string cached_song_path;
+
+  // music visualizer / EQ
+  Visualizer::State viz_state;
 
   // queue scrolling
   unsigned int queue_ctr = 0;

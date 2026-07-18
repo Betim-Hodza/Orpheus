@@ -5,8 +5,12 @@
 #include "stb_image_resize2.h"
 
 #include "art.hpp"
+#include <algorithm>
+#include <cstdint>
 #include <filesystem>
+#include <map>
 #include <sys/stat.h>
+#include <vector>
 
 namespace Art
 {
@@ -103,6 +107,69 @@ uint32_t GetPixelRGB(const ImageData &img, int x, int y)
   uint8_t b = img.pixels[idx + 2];
 
   return ((static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) | static_cast<uint32_t>(b));
+}
+
+/* *
+ * @brief Build a 16-step ANSI-256 ramp from the resized RGBA buffer,
+ * sorted darkest -> brightest. The visualizer uses this so its colors
+ * match the album art. Runs once per art generation (i.e. once per song),
+ * not per frame.
+ * */
+static void extractPalette(const std::vector<unsigned char> &resized, int w, int h, int (&out)[16])
+{
+  // Aggregate per ANSI index: frequency + summed luminance (from raw RGB,
+  // so luminance stays accurate even though the index is quantized).
+  struct Entry
+  {
+    int count = 0;
+    double lum_sum = 0.0;
+  };
+  std::map<int, Entry> buckets;
+
+  for (int y = 0; y < h; ++y)
+  {
+    for (int x = 0; x < w; ++x)
+    {
+      size_t idx = (static_cast<size_t>(y) * w + x) * 4;
+      uint8_t r = resized[idx];
+      uint8_t g = resized[idx + 1];
+      uint8_t b = resized[idx + 2];
+      uint32_t rgb = (static_cast<uint32_t>(r) << 16) | (static_cast<uint32_t>(g) << 8) | b;
+      int ansi = RGBToANSI256(rgb);
+      float lum = 0.299f * r + 0.587f * g + 0.114f * b;
+      auto &e = buckets[ansi];
+      e.count++;
+      e.lum_sum += lum;
+    }
+  }
+
+  // Sort unique ANSI colors by average luminance ascending.
+  std::vector<std::pair<float, int>> sorted; // (avg_lum, ansi)
+  sorted.reserve(buckets.size());
+  for (const auto &kv : buckets)
+    sorted.emplace_back(static_cast<float>(kv.second.lum_sum / kv.second.count), kv.first);
+  std::sort(sorted.begin(), sorted.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
+
+  const int N = static_cast<int>(sorted.size());
+  if (N == 0)
+  {
+    for (int i = 0; i < 16; ++i) out[i] = 235;
+    return;
+  }
+
+  // Pick 16 entries: if we have <= 16 unique colors, use them all and pad
+  // by repeating the last. If > 16, stride evenly across the luminance-
+  // sorted list so the ramp spans the art's full dark->bright range.
+  for (int i = 0; i < 16; ++i)
+  {
+    int pick;
+    if (N <= 16)
+      pick = std::min(i, N - 1);
+    else
+      pick = (i * N) / 16;
+    out[i] = sorted[pick].second;
+  }
 }
 
 /* *
@@ -211,6 +278,11 @@ AsciiCanvas Generate(const ImageData &image, ColorMode mode, RenderMode rmode, i
       canvas.cells.push_back(cell);
     }
   }
+
+  // Build the visualizer palette from the resized pixels so the EQ colors
+  // match the art. Runs once per song.
+  extractPalette(resized, target_w, resize_h, canvas.palette);
+  canvas.has_palette = true;
 
   return canvas;
 }

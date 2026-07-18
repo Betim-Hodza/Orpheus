@@ -2,7 +2,9 @@
 
 - [X] different album ascii styled (current is half blocks)
  - uses traditional ascii now
-- [ ] equalizer that reacts to sound (underneath artist info)
+- [X] equalizer that reacts to sound (underneath artist info)
+  - FFT analyzer via custom miniaudio tap node + ring buffer
+  - styles: block / ansi-art / braille / spectrogram (press `v` to cycle)
 - [ ] m4a support via ffmpeg
 - [X] directory sort alphabetically
 - [ ] Faster directory traversal
